@@ -28,24 +28,69 @@ class TestConfig(TestCase):
         BROKER_URL = 'amqp://test:test@localhost/'
 
 
-class TestConsumer(TestCase):
+class TestDequeue(TestCase):
 
     def setUp(self):
         self.bus = Bus()
+        self.bus.start()
 
     def tearDown(self):
-        self.bus.shutdown()
+        self.bus.stop()
 
-    def test_pull_as_function(self):
+    def test_dequeue_as_function(self):
         event = Event()
 
-        def on_message(content):
-            self.assertEqual('hello', content)
+        def on_message(message):
+            self.assertEqual('hello', message)
             event.set()
 
-        self.bus.pull('queue_test', on_message)
-
-        self.bus.push('queue_test', 'hello')
+        self.bus.dequeue('queue_test', on_message)
+        self.bus.enqueue('queue_test', 'hello')
 
         event.wait()
 
+    def test_dequeue_as_decorator(self):
+        event = Event()
+
+        @self.bus.dequeue('queue_test')
+        def on_message(message):
+            self.assertEqual('hello', message)
+            event.set()
+
+        self.bus.enqueue('queue_test', 'hello')
+
+        event.wait()
+
+
+class TestSubscribe(TestCase):
+
+    def setUp(self):
+        self.bus = Bus()
+        self.bus.start()
+
+    def tearDown(self):
+        self.bus.stop()
+
+    def test_subscribe_as_function(self):
+        event = Event()
+
+        def on_message(message):
+            self.assertEqual('hello', message)
+            event.set()
+
+        self.bus.subscribe('project.app.topic1', on_message)
+        self.bus.publish('project.app.topic1', 'hello')
+
+        event.wait()
+
+    def test_subscribe_as_decorator(self):
+        event = Event()
+
+        @self.bus.subscribe('project.app.topic1')
+        def on_message(message):
+            self.assertEqual('hello', message)
+            event.set()
+
+        self.bus.publish('project.app.topic1', 'hello')
+
+        event.wait()

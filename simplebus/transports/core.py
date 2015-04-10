@@ -19,10 +19,16 @@ class Transport(object):
     def close(self):
         raise NotImplementedError
 
-    def push(self, queue, message):
+    def dequeue(self, queue, exchange, callback):
         raise NotImplementedError
 
-    def pull(self, queue, callback):
+    def enqueue(self, queue, exchange, message):
+        raise NotImplementedError
+
+    def publish(self, topic, exchange, message):
+        raise NotImplementedError
+
+    def subscribe(self, topic, exchange, callback):
         raise NotImplementedError
 
 

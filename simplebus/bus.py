@@ -12,48 +12,78 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import simplejson
+
 from simplebus.config import Config
 from simplebus.transports import create_transport
 from simplebus.transports.core import Message
-from simplebus.utils import has_self
 
 
 class Bus(object):
     def __init__(self):
+        self.__consumers = []
+        self.__started = False
         self.__transport = None
-        self.__consumers_by_queue = {}
         self.config = Config()
 
-    def push(self, queue, content, delivery_mode=None, expiration=None):
-        self.__ensure_transport()
+    def dequeue(self, queue, callback=None, exchange=None):
+        self.__check_started()
+        if callback:
+            return self.__transport.dequeue(
+                queue,
+                exchange,
+                lambda message: self.__dispatch_message(message, callback))
 
-        message = Message(content, delivery_mode, expiration)
-        self.__transport.push(queue, message)
+        def decorator(func):
+            self.dequeue(queue, func, exchange)
+            return func
+        return decorator
 
-    def pull(self, queue, callback):
-        self.__ensure_transport()
+    def enqueue(self, queue, content, delivery_mode=None, expiration=None, exchange=None):
+        self.__check_started()
+        body = simplejson.dumps(content)
+        msg = Message(body, delivery_mode, expiration)
+        self.__transport.enqueue(queue, exchange, msg)
 
-        use_self = has_self(callback)
+    def publish(self, topic, content, delivery_mode=None, expiration=None, exchange=None):
+        self.__check_started()
+        body = simplejson.dumps(content)
+        msg = Message(body, delivery_mode, expiration)
+        self.__transport.publish(topic, exchange, msg)
 
-        def on_message(message):
-            try:
-                if use_self:
-                    callback(self, message.body)
-                else:
-                    callback(message.body)
-                message.complete()
-            except Exception:
-                message.reject()
+    def subscribe(self, topic, callback=None, exchange=None):
+        self.__check_started()
+        if callback:
+            return self.__transport.subscribe(
+                topic,
+                exchange,
+                lambda message: self.__dispatch_message(message, callback))
 
-        return self.__transport.pull(queue, on_message)
+        def decorator(func):
+            self.subscribe(topic, func, exchange)
+            return func
+        return decorator
 
-    def shutdown(self):
+    def start(self):
+        self.__started = True
+        self.__transport = create_transport(self.config.BROKER_URL)
+
+    def stop(self):
         if self.__transport:
             self.__transport.close()
             self.__transport = None
 
-    def __ensure_transport(self):
-        if self.__transport:
-            return
+        self.__started = False
 
-        self.__transport = create_transport(self.config.BROKER_URL)
+    @staticmethod
+    def __dispatch_message(message, callback):
+        try:
+            obj = simplejson.loads(message.body)
+            callback(obj)
+            message.complete()
+        except Exception:
+            message.reject()
+
+    def __check_started(self):
+        if not self.__started:
+            raise RuntimeError('Bus must be started first.')
