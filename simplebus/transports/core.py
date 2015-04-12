@@ -12,23 +12,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import uuid
 from simplebus.enums import DeliveryMode
 
 
 class Transport(object):
+    def open(self):
+        raise NotImplementedError
+
     def close(self):
         raise NotImplementedError
 
-    def dequeue(self, queue, exchange, callback):
+    def send_queue(self, queue, message):
         raise NotImplementedError
 
-    def enqueue(self, queue, exchange, message):
+    def send_topic(self, topic, message):
         raise NotImplementedError
 
-    def publish(self, topic, exchange, message):
+    def subscribe_queue(self, queue, dispatcher):
         raise NotImplementedError
 
-    def subscribe(self, topic, exchange, callback):
+    def subscribe_topic(self, topic, dispatcher):
+        raise NotImplementedError
+
+
+class Confirmation(object):
+    def complete(self):
+        raise NotImplementedError
+
+    def defer(self):
         raise NotImplementedError
 
 
@@ -37,16 +49,9 @@ class Cancellation(object):
         raise NotImplementedError
 
 
-class Confirmation(object):
-    def complete(self):
-        raise NotImplementedError
-
-    def reject(self):
-        raise NotImplementedError
-
-
 class Message(object):
     def __init__(self, body, delivery_mode=None, expiration=None, confirmation=None):
+        self.id = str(uuid.uuid4())
         self.body = body
         self.delivery_mode = DeliveryMode.persistent if delivery_mode is None else delivery_mode
         self.expiration = expiration
@@ -57,7 +62,12 @@ class Message(object):
             self.__confirmation.complete()
             self.__confirmation = None
 
-    def reject(self):
+    def defer(self):
         if self.__confirmation:
-            self.__confirmation.reject()
+            self.__confirmation.defer()
             self.__confirmation = None
+
+
+class MessageDispatcher(object):
+    def dispatch(self, message):
+        raise NotImplementedError

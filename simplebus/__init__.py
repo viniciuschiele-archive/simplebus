@@ -13,5 +13,6 @@
 # limitations under the License.
 
 from simplebus.bus import Bus
-from simplebus.enums import DeliveryMode
 from simplebus.config import Config
+from simplebus.consumers import Consumer
+from simplebus.producers import Producer

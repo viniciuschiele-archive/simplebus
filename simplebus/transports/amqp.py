@@ -12,14 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
 import uuid
 
 from amqpstorm import UriConnection
 from simplebus.enums import DeliveryMode
 from simplebus.transports.core import Cancellation
+from simplebus.transports.core import Transport
 from simplebus.transports.core import Confirmation
 from simplebus.transports.core import Message
-from simplebus.transports.core import Transport
 from threading import Lock
 from threading import Thread
 
@@ -28,142 +29,76 @@ class AmqpTransport(Transport):
     def __init__(self, url):
         self.__connection = None
         self.__connection_lock = Lock()
-        self.__cancellations = []
+        self.__reconnection_lock = Lock()
+        self.__opened = False
+        self.__reconnecting = False
+        self.__consumers = {}
         self.__url = url
 
-    def close(self):
-        if not self.__connection:
+    def open(self):
+        if self.__opened:
             return
 
-        while len(self.__cancellations) > 0:
-            try:
-                cancellation = self.__cancellations.pop()
-                cancellation.cancel()
-            except:
-                pass
+        self.__opened = True
+        self.__reconnecting = False
+        self.__ensure_connection()
 
+    def close(self):
+        if not self.__opened:
+            return
+
+        self.__opened = False
         self.__connection.close()
         self.__connection = None
 
-    def dequeue(self, queue, exchange, callback):
-        cancellation = AmqpCancellation()
+    def create_queue(self, queue):
+        with self.get_channel() as channel:
+            channel.queue.declare(queue, durable=True)
+            channel.exchange.declare(queue, durable=True)
+            channel.queue.bind(queue, queue, '')
 
-        self.__dequeue(queue, exchange, callback, cancellation)
+    def create_topic(self, topic):
+        with self.get_channel() as channel:
+            channel.exchange.declare(topic, 'topic', durable=True)
 
-        return cancellation
+    def send_queue(self, queue, message):
+        self.create_queue(queue)
 
-    def enqueue(self, queue, exchange, message):
-        if not exchange:
-            exchange = 'amq.direct'
+        self.__send_message(queue, '', message)
 
-        self.__create_queue(queue, exchange)
+    def send_topic(self, topic, message):
+        self.create_topic(topic)
 
-        self.__send_message(exchange, queue, message)
+        self.__send_message(topic, '', message)
 
-    def publish(self, topic, exchange, message):
-        if not exchange:
-            exchange = 'amq.topic'
+    def subscribe_queue(self, queue, dispatcher):
+        consumer = AmqpConsumer(self, queue, None, dispatcher)
+        consumer.subscribe()
+        self.__consumers[consumer.id] = consumer
+        return AmqpCancellation(self, consumer.id)
 
-        self.__create_exchange(topic, exchange)
+    def subscribe_topic(self, topic, dispatcher):
+        consumer = AmqpConsumer(self, None, topic, dispatcher)
+        consumer.subscribe()
+        self.__consumers[consumer.id] = consumer
+        return AmqpCancellation(self, consumer.id)
 
-        self.__send_message(exchange, topic, message)
+    def unsubscribe(self, id):
+        consumer = self.__consumers.get(id)
 
-    def subscribe(self, topic, exchange, callback):
-        cancellation = AmqpCancellation()
+        if consumer:
+            consumer.unsubscribe()
 
-        self.__subscribe(topic, exchange, callback, cancellation)
+    def get_channel(self):
+        if not self.__opened:
+            raise RuntimeError('Transport is not opened.')
 
-        return cancellation
-
-    def _get_channel(self):
         self.__ensure_connection()
         return self.__connection.channel()
 
-    def __create_queue(self, queue, exchange):
-        with self._get_channel() as channel:
-            channel.queue.declare(queue, durable=True)
-
-            if exchange:
-                channel.exchange.declare(exchange, durable=True)
-                channel.queue.bind(queue, exchange, queue)
-
-    def __create_exchange(self, topic, exchange):
-        if not exchange:
-            exchange = topic
-
-        with self._get_channel() as channel:
-            channel.exchange.declare(exchange, 'topic', durable=True)
-
-    def __dequeue(self, queue, exchange, callback, cancellation):
-        def start():
-            try:
-                channel.start_consuming()
-            except:
-                pass
-
-        def on_message(body, ch, method, properties):
-            message = self.__to_message(body, ch, method, properties)
-            callback(message)
-
-        self.__create_queue(queue, exchange)
-
-        consumer_tag = str(uuid.uuid1())
-
-        channel = self._get_channel()
-        channel.basic.qos(1)
-        channel.basic.consume(on_message, queue, consumer_tag)
-
-        thread = Thread(target=start)
-        thread.daemon = True
-        thread.start()
-
-        cancellation.consumer_tag = consumer_tag
-        cancellation.channel = channel
-        cancellation.thread = thread
-
-    def __subscribe(self, topic, exchange, callback, cancellation):
-        def start():
-            try:
-                channel.start_consuming()
-            except:
-                pass
-
-        def on_message(body, ch, method, properties):
-            message = self.__to_message(body, ch, method, properties)
-            callback(message)
-
-        if not exchange:
-            exchange = 'amq.topic'
-
-        self.__create_exchange(topic, exchange)
-
-        queue_name = topic + '_' + str(uuid.uuid1())
-        consumer_tag = str(uuid.uuid1())
-
-        channel = self._get_channel()
-        channel.queue.declare(queue_name, exclusive=True, auto_delete=True)
-        channel.queue.bind(queue_name, exchange, topic)
-
-        channel.basic.qos(1)
-        channel.basic.consume(on_message, queue_name, consumer_tag)
-
-        thread = Thread(target=start)
-        thread.daemon = True
-        thread.start()
-
-        cancellation.consumer_tag = consumer_tag
-        cancellation.channel = channel
-        cancellation.thread = thread
-
-    def __send_message(self, exchange, routing_key, message):
-        properties = {
-            'delivery_mode': DeliveryMode.persistent if message.delivery_mode is None else message.delivery_mode.value,
-            'expiration': None if message.expiration is None else str(message.expiration)
-        }
-
-        with self._get_channel() as channel:
-            channel.confirm_deliveries()
-            channel.basic.publish(message.body, routing_key, exchange, properties=properties)
+    def on_exception(self, e):
+        if 'shutdown' in str(e):
+            self.__start_reconnecting()
 
     def __ensure_connection(self):
         if self.__connection and self.__connection.is_open:
@@ -173,48 +108,143 @@ class AmqpTransport(Transport):
             if self.__connection and self.__connection.is_open:
                 return
 
-            if self.__connection:
-                self.__connection.close()
-                self.__connection = None
-
             self.__connection = UriConnection(self.__url)
             self.__connection.open()
+            self.__resubscribe()
 
-    @staticmethod
-    def __to_message(body, channel, method, properties):
-        def get_property(name, default, convert=None):
-            if name in properties:
-                value = properties[name]
-                if value is not None and value != '' and convert:
-                    return convert(value)
-                return value
+    def __start_reconnecting(self):
+        with self.__reconnection_lock:
+            if self.__reconnecting:
+                return
+            self.__reconnecting = True
 
-            return default
+        thread = Thread(target=self.__ensure_connection)
+        thread.daemon = True
+        thread.start()
 
-        return Message(
-            str(body, encoding='utf-8'),
-            get_property('delivery_mode', DeliveryMode.persistent, lambda x: DeliveryMode(x)),
-            get_property('expiration', None, lambda x: int(x)),
-            AmqpConfirmation(channel, method.get('delivery_tag')))
+    def __reconnect(self):
+        while self.__opened and (self.__connection is None or not self.__connection.is_open):
+            try:
+                self.__ensure_connection()
+                self.__reconnecting = False
+            except:
+                time.sleep(1)
+
+    def __resubscribe(self):
+        for consumer in self.__consumers:
+            consumer.subscribe()
+
+    def __send_message(self, exchange, routing_key, message):
+        properties = {
+            'app_id': None,
+            'delivery_mode': DeliveryMode.persistent if message.delivery_mode is None else message.delivery_mode.value,
+            'expiration': None if message.expiration is None else str(message.expiration),
+            'message_id': message.id,
+        }
+
+        with self.get_channel() as channel:
+            channel.confirm_deliveries()
+            channel.basic.publish(message.body, routing_key, exchange, properties=properties)
 
 
 class AmqpCancellation(Cancellation):
-    def __init__(self):
-        self.consumer_id = None
-        self.channel = None
-        self.thread = None
+    def __init__(self, transport, id):
+        self.__transport = transport
+        self.__id = id
 
     def cancel(self):
-        self.channel.basic.cancel(self.consumer_id)
+        self.__transport.unsubscribe(self.__id)
 
 
 class AmqpConfirmation(Confirmation):
-    def __init__(self, channel, delivery_tag):
+    def __init__(self, body, channel, method, properties):
+        self.__body = body
         self.__channel = channel
-        self.__delivery_tag = delivery_tag
+        self.__method = method
+        self.__properties = properties
 
     def complete(self):
-        self.__channel.basic.ack(self.__delivery_tag)
+        self.__channel.basic.ack(self.__method.get('delivery_tag'))
 
-    def reject(self):
-        self.__channel.basic.reject(self.__delivery_tag)
+    def defer(self):
+        self.__channel.basic.publish(self.__body,
+                                     str(self.__method.get('routing_key'), encoding='utf-8'),
+                                     str(self.__method.get('exchange'), encoding='utf-8'),
+                                     self.__properties)
+
+        self.complete()
+
+
+class AmqpConsumer(object):
+    def __init__(self, transport, queue, topic, dispatcher):
+        self.id = str(uuid.uuid4())
+        self.__transport = transport
+        self.__queue = queue
+        self.__topic = topic
+        self.__dispatcher = dispatcher
+        self.__channel = None
+
+    def subscribe(self):
+        if self.__queue:
+            self.__subscribe_queue()
+        else:
+            self.__subscribe_topic()
+
+    def unsubscribe(self):
+        self.__channel.stop_consuming()
+        self.__channel.close()
+
+    def __subscribe_queue(self):
+        self.__transport.create_queue(self.__queue)
+
+        self.__channel = self.__transport.get_channel()
+        self.__channel.basic.qos(1)
+        self.__channel.basic.consume(self.__on_message, self.__queue, self.id)
+
+        thread = Thread(target=self.__start_consuming)
+        thread.daemon = True
+        thread.start()
+
+    def __subscribe_topic(self):
+        self.__transport.create_topic(self.__topic)
+
+        queue_name = self.__topic + '-' + self.id
+
+        self.__channel = self.__transport.get_channel()
+        self.__channel.queue.declare(queue_name, exclusive=True, auto_delete=True)
+        self.__channel.queue.bind(queue_name, self.__topic)
+        self.__channel.basic.qos(1)
+        self.__channel.basic.consume(self.__on_message, queue_name, self.id)
+
+        thread = Thread(target=self.__start_consuming)
+        thread.daemon = True
+        thread.start()
+
+    def __start_consuming(self):
+        try:
+            self.__channel.start_consuming()
+        except Exception as e:
+            self.__transport.on_exception(e)
+
+    def __on_message(self, body, ch, method, properties):
+        message = to_message(body, ch, method, properties)
+        self.__dispatcher.dispatch(message)
+
+
+def to_message(body, channel, method, properties):
+    def get_property(name, default, convert=None):
+        if name in properties:
+            value = properties[name]
+            if value is not None and value != '' and convert:
+                return convert(value)
+            return value
+
+        return default
+
+    confirmation = AmqpConfirmation(body, channel, method, properties)
+
+    return Message(
+        str(body, encoding='utf-8'),
+        get_property('delivery_mode', DeliveryMode.persistent, lambda x: DeliveryMode(x)),
+        get_property('expiration', None, lambda x: int(x)),
+        confirmation)

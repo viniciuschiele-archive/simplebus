@@ -15,23 +15,25 @@
 """Implements the configuration related objects."""
 
 
-class Config(dict):
+class Config(object):
     """
     SimpleBus configuration object. Default values are defined as
     class attributes. Additional attributes may be added by extensions.
     """
 
-    BROKER_URL = 'amqp://guest:guest@localhost/'
+    DEFAULT_ENDPOINTS = {'default': 'amqp://guest:guest@localhost/'}
+
+    def __init__(self):
+        self.endpoints = self.DEFAULT_ENDPOINTS.copy()
 
     def from_object(self, obj):
         """Load values from an object."""
-        for key in dir(obj):
-            if key.isupper():
-                value = getattr(obj, key)
-                self.__setattr(key, value)
+        if not hasattr(obj, 'SIMPLEBUS'):
+            raise RuntimeError('Configuration object must have SIMPLEBUS attribute.')
 
-    def __setattr(self, key, value):
-        """Sets an attribute if it exists, otherwise raises an exception"""
-        if not hasattr(self.__class__, key):
-            raise ValueError("Unknown config key: %s" % key)
-        setattr(self, key, value)
+        config = getattr(obj, 'SIMPLEBUS')
+
+        self.endpoints = config.get('endpoints')
+
+        if not self.endpoints:
+            raise RuntimeError('Configuration object must have at least one endpoint')

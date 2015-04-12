@@ -12,9 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from enum import Enum
+import simplejson
+from simplebus.transports.core import MessageDispatcher
 
 
-class DeliveryMode(Enum):
-    memory = 1
-    persistent = 2
+class DefaultDispatcher(MessageDispatcher):
+    def __init__(self, consumer):
+        self.__consumer = consumer
+
+    def dispatch(self, message):
+        try:
+            content = simplejson.loads(message.body)
+            self.__consumer.handle(content)
+            message.complete()
+        except:
+            message.defer()

@@ -15,74 +15,81 @@
 import simplejson
 
 from simplebus.config import Config
+from simplebus.consumers import ConsumerRegistry
+from simplebus.enums import DeliveryMode
 from simplebus.transports import create_transport
 from simplebus.transports.core import Message
 
 
 class Bus(object):
     def __init__(self):
-        self.__consumers = []
+        self.__consumers = ConsumerRegistry(self)
         self.__started = False
-        self.__transport = None
+        self.__transports = {}
         self.config = Config()
 
-    def dequeue(self, queue, callback=None, exchange=None):
+    @property
+    def consumers(self):
+        return self.__consumers
+
+    @property
+    def is_started(self):
+        return self.__started
+
+    def consumer(self, consumer_cls):
+        self.consumers.register(consumer_cls())
+        return consumer_cls
+
+    def producer(self, producer_cls):
+        producer_cls.bus = self
+        return producer_cls
+
+    def send(self, queue, message, expiration=None, endpoint=None):
         self.__check_started()
-        if callback:
-            return self.__transport.dequeue(
-                queue,
-                exchange,
-                lambda message: self.__dispatch_message(message, callback))
 
-        def decorator(func):
-            self.dequeue(queue, func, exchange)
-            return func
-        return decorator
+        body = simplejson.dumps(message)
+        msg = Message(body, DeliveryMode.persistent, expiration)
 
-    def enqueue(self, queue, content, delivery_mode=None, expiration=None, exchange=None):
+        transport = self._get_transport(endpoint)
+        transport.send_queue(queue, msg)
+
+    def publish(self, topic, message, expiration=None, endpoint=None):
         self.__check_started()
-        body = simplejson.dumps(content)
-        msg = Message(body, delivery_mode, expiration)
-        self.__transport.enqueue(queue, exchange, msg)
 
-    def publish(self, topic, content, delivery_mode=None, expiration=None, exchange=None):
-        self.__check_started()
-        body = simplejson.dumps(content)
-        msg = Message(body, delivery_mode, expiration)
-        self.__transport.publish(topic, exchange, msg)
+        body = simplejson.dumps(message)
+        msg = Message(body, DeliveryMode.persistent, expiration)
 
-    def subscribe(self, topic, callback=None, exchange=None):
-        self.__check_started()
-        if callback:
-            return self.__transport.subscribe(
-                topic,
-                exchange,
-                lambda message: self.__dispatch_message(message, callback))
-
-        def decorator(func):
-            self.subscribe(topic, func, exchange)
-            return func
-        return decorator
+        transport = self._get_transport(endpoint)
+        transport.send_topic(topic, msg)
 
     def start(self):
         self.__started = True
-        self.__transport = create_transport(self.config.BROKER_URL)
+
+        for endpoint in self.config.endpoints.items():
+            transport = create_transport(endpoint[1])
+            transport.open()
+            self.__transports[endpoint[0]] = transport
+
+        self.__consumers._start()
 
     def stop(self):
-        if self.__transport:
-            self.__transport.close()
-            self.__transport = None
+        for transport in self.__transports.values():
+            transport.close()
+
+        self.__transports.clear()
 
         self.__started = False
 
-    @staticmethod
-    def __dispatch_message(message, callback):
-        try:
-            obj = simplejson.loads(message.body)
-            callback(obj)
-            message.complete()
-        except Exception:
-            message.reject()
+    def _get_transport(self, endpoint):
+        if endpoint is None:
+            endpoint = 'default'
+
+        transport = self.__transports.get(endpoint)
+
+        if transport is None:
+            raise RuntimeError("Endpoint '%s' not found" % endpoint)
+
+        return transport
 
     def __check_started(self):
         if not self.__started:
