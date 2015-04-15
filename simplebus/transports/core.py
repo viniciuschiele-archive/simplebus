@@ -14,6 +14,8 @@
 
 
 class Transport(object):
+    abstract = True
+
     def open(self):
         raise NotImplementedError
 
@@ -23,20 +25,20 @@ class Transport(object):
     def create_message(self):
         raise NotImplementedError
 
-    def send_queue(self, queue, message):
+    def send(self, queue, message):
         raise NotImplementedError
 
-    def send_topic(self, topic, message):
+    def publish(self, topic, message):
         raise NotImplementedError
 
-    def subscribe_queue(self, queue, dispatcher):
+    def consume(self, queue, dispatcher):
         raise NotImplementedError
 
-    def subscribe_topic(self, topic, dispatcher):
+    def subscribe(self, topic, dispatcher):
         raise NotImplementedError
 
 
-class TransportMessage(object):
+class Message(object):
     abstract = True
 
     @property
@@ -78,11 +80,16 @@ class TransportMessage(object):
         raise NotImplementedError
 
 
-class Cancellation(object):
+class Cancellable(object):
+    abstract = True
+
     def cancel(self):
         raise NotImplementedError
 
 
-class MessageDispatcher(object):
-    def dispatch(self, transport_message):
+class Dispatcher(object):
+    abstract = True
+
+    def dispatch(self, message):
         raise NotImplementedError
+

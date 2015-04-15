@@ -2,19 +2,31 @@ import threading
 
 from simplebus.local import Proxy
 
+__bus = None
 __local = threading.local()
 
 
-def set_transport_message(transport_message):
-    if transport_message:
-        __local.transport_message = transport_message
-    else:
-        del __local.transport_message
+def get_current_bus():
+    return __bus
 
 
-def get_transport_message():
-    if hasattr(__local, 'transport_message'):
-        return __local.transport_message
+def get_current_message():
+    if hasattr(__local, 'current_message'):
+        return __local.current_message
     return None
 
-transport_message = Proxy(get_transport_message)
+
+def set_current_bus(bus):
+    global __bus
+    __bus = bus
+
+
+def set_current_message(message):
+    if message:
+        __local.current_message = message
+    else:
+        del __local.current_message
+
+
+current_bus = Proxy(get_current_bus)
+current_message = Proxy(get_current_message)

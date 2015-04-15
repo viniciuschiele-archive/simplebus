@@ -12,80 +12,114 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
 import simplejson
 import uuid
 
 from simplebus.config import Config
-from simplebus.consumers import ConsumerRegistry
+from simplebus.dispatchers import ConsumerDispatcher
+from simplebus.dispatchers import SubscriberDispatcher
+from simplebus.handlers import CallbackHandler
+from simplebus.handlers import MessageHandler
+from simplebus.state import set_current_bus
 from simplebus.transports import create_transport
 
 
 class Bus(object):
     def __init__(self):
-        self.__consumers = ConsumerRegistry(self)
+        self.__cancellations = []
         self.__started = False
         self.__transports = {}
         self.config = Config()
 
     @property
-    def consumers(self):
-        return self.__consumers
-
-    @property
     def is_started(self):
         return self.__started
 
-    def consumer(self, consumer_cls):
-        self.consumers.register(consumer_cls())
-        return consumer_cls
+    def consume(self, queue, handler, max_delivery_count=3, endpoint=None):
+        self.__check_started()
 
-    def producer(self, producer_cls):
-        producer_cls.bus = self
-        return producer_cls
+        handler = self.__get_handler(handler)
+        transport = self.__get_transport(endpoint)
+        dispatcher = ConsumerDispatcher(handler, max_delivery_count)
+        cancellation = transport.consume(queue, dispatcher)
+        self.__cancellations.append(cancellation)
+
+        return cancellation
 
     def send(self, queue, message, expires=None, endpoint=None):
         self.__check_started()
 
-        transport = self._get_transport(endpoint)
+        transport = self.__get_transport(endpoint)
 
         msg = transport.create_message()
         msg.id = str(uuid.uuid4())
         msg.body = simplejson.dumps(message)
         msg.expires = expires
 
-        transport.send_queue(queue, msg)
+        transport.send(queue, msg)
+
+    def subscribe(self, topic, handler, endpoint=None):
+        self.__check_started()
+
+        handler = self.__get_handler(handler)
+        transport = self.__get_transport(endpoint)
+        dispatcher = SubscriberDispatcher(handler)
+        cancellation = transport.subscribe(topic, dispatcher)
+        self.__cancellations.append(cancellation)
+
+        return cancellation
 
     def publish(self, topic, message, expires=None, endpoint=None):
         self.__check_started()
 
-        transport = self._get_transport(endpoint)
+        transport = self.__get_transport(endpoint)
 
         msg = transport.create_message()
         msg.id = str(uuid.uuid4())
         msg.body = simplejson.dumps(message)
         msg.expires = expires
 
-        transport.send_topic(topic, msg)
+        transport.publish(topic, msg)
 
     def start(self):
-        self.__started = True
-
         for endpoint in self.config.endpoints.items():
             transport = create_transport(endpoint[1])
             transport.open()
             self.__transports[endpoint[0]] = transport
 
-        self.__consumers._start()
+        self.__started = True
+
+        set_current_bus(self)
 
     def stop(self):
-        for transport in self.__transports.values():
-            transport.close()
-
-        self.__transports.clear()
-
         self.__started = False
 
-    def _get_transport(self, endpoint):
+        for cancellation in self.__cancellations:
+            cancellation.cancel()
+        self.__cancellations.clear()
+
+        for transport in self.__transports.values():
+            transport.close()
+        self.__transports.clear()
+
+        set_current_bus(None)
+
+    def __check_started(self):
+        if not self.__started:
+            raise RuntimeError('Bus must be started first.')
+
+    @staticmethod
+    def __get_handler(handler):
+        if isinstance(handler, MessageHandler):
+            return handler
+
+        if inspect.isfunction(handler):
+            return CallbackHandler(handler)
+
+        raise TypeError('Parameter handler must be a MessageHandler class or a method.')
+
+    def __get_transport(self, endpoint):
         if endpoint is None:
             endpoint = 'default'
 
@@ -95,7 +129,3 @@ class Bus(object):
             raise RuntimeError("Endpoint '%s' not found" % endpoint)
 
         return transport
-
-    def __check_started(self):
-        if not self.__started:
-            raise RuntimeError('Bus must be started first.')

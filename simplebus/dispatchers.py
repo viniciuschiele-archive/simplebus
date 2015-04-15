@@ -14,27 +14,46 @@
 
 import simplejson
 
-from simplebus.state import set_transport_message
-from simplebus.transports.core import MessageDispatcher
+from simplebus.state import set_current_message
+from simplebus.transports.core import Dispatcher
 
 
-class DefaultDispatcher(MessageDispatcher):
-    def __init__(self, consumer):
-        self.__consumer = consumer
+class ConsumerDispatcher(Dispatcher):
+    def __init__(self, handler, max_delivery_count):
+        self.__handler = handler
+        self.__max_delivery_count = max_delivery_count
 
-    def dispatch(self, transport_message):
-        if transport_message.delivery_count > self.__consumer.max_delivery_count:
-            transport_message.complete()
+    def dispatch(self, message):
+        if message.delivery_count > self.__max_delivery_count:
+            message.complete()
 
-        content = simplejson.loads(transport_message.body)
+        content = simplejson.loads(message.body)
 
-        set_transport_message(transport_message)
+        set_current_message(message)
 
         try:
-            self.__consumer.handle(content)
-            transport_message.complete()
+            self.__handler.handle(content)
+            message.complete()
         except:
-            transport_message.defer()
+            message.defer()
 
-        set_transport_message(None)
+        set_current_message(None)
 
+
+class SubscriberDispatcher(Dispatcher):
+    def __init__(self, handler):
+        self.__handler = handler
+
+    def dispatch(self, message):
+        content = simplejson.loads(message.body)
+
+        set_current_message(message)
+
+        try:
+            self.__handler.handle(content)
+        except:
+            pass
+
+        message.complete()
+
+        set_current_message(None)

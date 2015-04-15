@@ -14,9 +14,10 @@
 
 from simplebus import Bus
 from simplebus import Config
-from simplebus import Consumer
-from simplebus import transport_message
-from simplebus import Producer
+from simplebus import consume
+from simplebus import current_message
+from simplebus import MessageHandler
+from simplebus import subscribe
 from threading import Event
 from unittest import TestCase
 
@@ -39,7 +40,9 @@ class TestConfig(TestCase):
         }
 
 
-class TestConsumerRegistry(TestCase):
+class TestConsumer(TestCase):
+    queue = 'tests.queue1'
+
     def setUp(self):
         self.bus = Bus()
         self.bus.start()
@@ -47,24 +50,59 @@ class TestConsumerRegistry(TestCase):
     def tearDown(self):
         self.bus.stop()
 
-    def test_registry(self):
-        class Consumer1(Consumer):
-            queue = 'tests.queue1'
+    def test_consumer_as_class(self):
+        event = Event()
 
+        class Handler1(MessageHandler):
             def handle(self_, message):
-                pass
+                self.assertEqual('hello', message)
+                event.set()
 
-        consumer = Consumer1()
+        self.bus.consume(self.queue, Handler1())
+        self.bus.send(self.queue, 'hello')
 
-        self.bus.consumers.register(consumer)
-        self.assertEqual(1, self.bus.consumers.length)
+        event.wait()
 
-        self.bus.consumers.remove(consumer)
-        self.assertEqual(0, self.bus.consumers.length)
+    def test_consumer_as_decorator(self):
+        event = Event()
+
+        @consume(self.queue)
+        def handle(message):
+            self.assertEqual('hello', message)
+            event.set()
+
+        self.bus.send(self.queue, 'hello')
+
+        event.wait()
+
+    def test_consumer_as_function(self):
+        event = Event()
+
+        def handle(message):
+            self.assertEqual('hello', message)
+            event.set()
+
+        self.bus.consume(self.queue, handle)
+        self.bus.send(self.queue, 'hello')
+
+        event.wait()
+
+    def test_max_delivery_count(self):
+        event = Event()
+
+        def handle(message):
+            self.assertEqual('hello', message)
+            if current_message.delivery_count != 3:
+                raise RuntimeError('error')
+            event.set()
+
+        self.bus.consume(self.queue, handle)
+        self.bus.send(self.queue, 'hello')
+
+        event.wait()
 
 
-class TestConsumer(TestCase):
-    queue = 'tests.queue1'
+class TestSubscriber(TestCase):
     topic = 'tests.topic1'
 
     def setUp(self):
@@ -74,109 +112,39 @@ class TestConsumer(TestCase):
     def tearDown(self):
         self.bus.stop()
 
-    def test_consumer_with_queue(self):
+    def test_subscriber_as_class(self):
         event = Event()
 
-        class Consumer1(Consumer):
-            queue = self.queue
-
+        class Handler1(MessageHandler):
             def handle(self_, message):
                 self.assertEqual('hello', message)
                 event.set()
 
-        self.bus.consumers.register(Consumer1())
-        self.bus.send(self.queue, 'hello')
-
-        event.wait()
-
-    def test_consumer_with_queue_and_decorator(self):
-        event = Event()
-
-        @self.bus.consumer
-        class Consumer1(Consumer):
-            queue = self.queue
-
-            def handle(self_, message):
-                self.assertEqual('hello', message)
-                event.set()
-
-        self.bus.send(self.queue, 'hello')
-
-        event.wait()
-
-    def test_consumer_with_topic(self):
-        event = Event()
-
-        class Consumer1(Consumer):
-            topic = self.topic
-
-            def handle(self_, message):
-                self.assertEqual('hello', message)
-                event.set()
-
-        self.bus.consumers.register(Consumer1())
+        self.bus.subscribe(self.topic, Handler1())
         self.bus.publish(self.topic, 'hello')
 
         event.wait()
 
-    def test_consumer_with_topic_and_decorator(self):
+    def test_subscriber_as_decorator(self):
         event = Event()
 
-        @self.bus.consumer
-        class Consumer1(Consumer):
-            topic = self.topic
-
-            def handle(self_, message):
-                self.assertEqual('hello', message)
-                event.set()
+        @subscribe(self.topic)
+        def handle(message):
+            self.assertEqual('hello', message)
+            event.set()
 
         self.bus.publish(self.topic, 'hello')
 
         event.wait()
 
-    def test_max_delivery_count(self):
+    def test_subscriber_as_function(self):
         event = Event()
 
-        class Consumer1(Consumer):
-            queue = self.queue
+        def handle(message):
+            self.assertEqual('hello', message)
+            event.set()
 
-            def handle(self_, message):
-                if transport_message.delivery_count != 3:
-                    raise RuntimeError('error')
-                event.set()
-
-        self.bus.consumers.register(Consumer1())
-        self.bus.send(self.queue, 'hello')
-
-        event.wait()
-
-
-class TestProducer(TestCase):
-    queue = 'tests.queue1'
-
-    def setUp(self):
-        self.bus = Bus()
-        self.bus.start()
-
-    def tearDown(self):
-        self.bus.stop()
-
-    def test_publish(self):
-        event = Event()
-
-        @self.bus.consumer
-        class Consumer1(Consumer):
-            queue = self.queue
-
-            def handle(self_, message):
-                self.assertEqual('hello', message)
-                event.set()
-
-        @self.bus.producer
-        class Producer1(Producer):
-            queue = self.queue
-
-        producer = Producer1()
-        producer.publish('hello')
+        self.bus.subscribe(self.topic, handle)
+        self.bus.publish(self.topic, 'hello')
 
         event.wait()

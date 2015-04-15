@@ -16,9 +16,9 @@ import time
 import uuid
 
 from amqpstorm import UriConnection
-from simplebus.transports.core import Cancellation
+from simplebus.transports.core import Cancellable
 from simplebus.transports.core import Transport
-from simplebus.transports.core import TransportMessage
+from simplebus.transports.core import Message
 from threading import Lock
 from threading import Thread
 
@@ -62,33 +62,33 @@ class AmqpTransport(Transport):
         with self.get_channel() as channel:
             channel.exchange.declare(topic, 'topic', durable=True)
 
-    def send_queue(self, queue, message):
-        self.create_queue(queue)
-
-        self.__send_message(queue, '', message)
-
-    def send_topic(self, topic, message):
-        self.create_topic(topic)
-
-        self.__send_message(topic, '', message)
-
-    def subscribe_queue(self, queue, dispatcher):
-        consumer = AmqpConsumer(self, queue, None, dispatcher)
-        consumer.subscribe()
-        self.__consumers[consumer.id] = consumer
-        return AmqpCancellation(self, consumer.id)
-
-    def subscribe_topic(self, topic, dispatcher, **options):
-        consumer = AmqpConsumer(self, None, topic, dispatcher, **options)
-        consumer.subscribe()
-        self.__consumers[consumer.id] = consumer
-        return AmqpCancellation(self, consumer.id)
-
-    def unsubscribe(self, id):
+    def cancel(self, id):
         consumer = self.__consumers.get(id)
 
         if consumer:
             consumer.unsubscribe()
+
+    def consume(self, queue, dispatcher):
+        consumer = AmqpConsumer(self, queue, None, dispatcher)
+        consumer.subscribe()
+        self.__consumers[consumer.id] = consumer
+        return AmqpCancellable(consumer.id, self)
+
+    def send(self, queue, message):
+        self.create_queue(queue)
+
+        self.__send_message(queue, '', message)
+
+    def publish(self, topic, message):
+        self.create_topic(topic)
+
+        self.__send_message(topic, '', message)
+
+    def subscribe(self, topic, dispatcher):
+        consumer = AmqpConsumer(self, None, topic, dispatcher)
+        consumer.subscribe()
+        self.__consumers[consumer.id] = consumer
+        return AmqpCancellable(consumer.id, self)
 
     def get_channel(self):
         if not self.__opened:
@@ -141,16 +141,16 @@ class AmqpTransport(Transport):
             channel.basic.publish(message.body, routing_key, exchange, properties=message.properties)
 
 
-class AmqpCancellation(Cancellation):
-    def __init__(self, transport, id):
-        self.__transport = transport
+class AmqpCancellable(Cancellable):
+    def __init__(self, id, transport):
         self.__id = id
+        self.__transport = transport
 
     def cancel(self):
-        self.__transport.unsubscribe(self.__id)
+        self.__transport.cancel(self.__id)
 
 
-class AmqpMessage(TransportMessage):
+class AmqpMessage(Message):
     DEFAULT_PROPERTIES = {
         'delivery_mode': 2,  # persistent
         'expiration': None
