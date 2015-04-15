@@ -16,6 +16,6 @@ from simplebus.bus import Bus
 from simplebus.config import Config
 from simplebus.decorators import consume
 from simplebus.decorators import subscribe
+from simplebus.handlers import MessageHandler
 from simplebus.state import current_bus
 from simplebus.state import current_message
-from simplebus.handlers import MessageHandler
