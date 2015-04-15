@@ -15,4 +15,5 @@
 from simplebus.bus import Bus
 from simplebus.config import Config
 from simplebus.consumers import Consumer
+from simplebus.state import transport_message
 from simplebus.producers import Producer

@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import simplejson
+
+from simplebus.state import set_transport_message
 from simplebus.transports.core import MessageDispatcher
 
 
@@ -20,10 +22,19 @@ class DefaultDispatcher(MessageDispatcher):
     def __init__(self, consumer):
         self.__consumer = consumer
 
-    def dispatch(self, message):
+    def dispatch(self, transport_message):
+        if transport_message.delivery_count > self.__consumer.max_delivery_count:
+            transport_message.complete()
+
+        content = simplejson.loads(transport_message.body)
+
+        set_transport_message(transport_message)
+
         try:
-            content = simplejson.loads(message.body)
             self.__consumer.handle(content)
-            message.complete()
+            transport_message.complete()
         except:
-            message.defer()
+            transport_message.defer()
+
+        set_transport_message(None)
+

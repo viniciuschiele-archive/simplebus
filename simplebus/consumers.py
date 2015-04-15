@@ -19,9 +19,9 @@ class Consumer(object):
     endpoint = None
     queue = None
     topic = None
-    max_retry = 3
+    max_delivery_count = 3
 
-    def handle(self, content):
+    def handle(self, message):
         raise NotImplementedError
 
 

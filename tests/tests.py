@@ -15,6 +15,7 @@
 from simplebus import Bus
 from simplebus import Config
 from simplebus import Consumer
+from simplebus import transport_message
 from simplebus import Producer
 from threading import Event
 from unittest import TestCase
@@ -130,6 +131,22 @@ class TestConsumer(TestCase):
                 event.set()
 
         self.bus.publish(self.topic, 'hello')
+
+        event.wait()
+
+    def test_max_delivery_count(self):
+        event = Event()
+
+        class Consumer1(Consumer):
+            queue = self.queue
+
+            def handle(self_, message):
+                if transport_message.delivery_count != 3:
+                    raise RuntimeError('error')
+                event.set()
+
+        self.bus.consumers.register(Consumer1())
+        self.bus.send(self.queue, 'hello')
 
         event.wait()
 

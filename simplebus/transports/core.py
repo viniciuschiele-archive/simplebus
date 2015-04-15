@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import uuid
-from simplebus.enums import DeliveryMode
-
 
 class Transport(object):
     def open(self):
         raise NotImplementedError
 
     def close(self):
+        raise NotImplementedError
+
+    def create_message(self):
         raise NotImplementedError
 
     def send_queue(self, queue, message):
@@ -36,7 +36,41 @@ class Transport(object):
         raise NotImplementedError
 
 
-class Confirmation(object):
+class TransportMessage(object):
+    abstract = True
+
+    @property
+    def id(self):
+        raise NotImplementedError
+
+    @id.setter
+    def id(self, value):
+        raise NotImplementedError
+
+    @property
+    def body(self):
+        raise NotImplementedError
+
+    @body.setter
+    def body(self, value):
+        raise NotImplementedError
+
+    @property
+    def delivery_count(self):
+        raise NotImplementedError
+
+    @delivery_count.setter
+    def delivery_count(self, value):
+        raise NotImplementedError
+
+    @property
+    def expires(self):
+        raise NotImplementedError
+
+    @expires.setter
+    def expires(self, value):
+        raise NotImplementedError
+
     def complete(self):
         raise NotImplementedError
 
@@ -49,25 +83,6 @@ class Cancellation(object):
         raise NotImplementedError
 
 
-class Message(object):
-    def __init__(self, body, delivery_mode=None, expiration=None, confirmation=None):
-        self.id = str(uuid.uuid4())
-        self.body = body
-        self.delivery_mode = DeliveryMode.persistent if delivery_mode is None else delivery_mode
-        self.expiration = expiration
-        self.__confirmation = confirmation
-
-    def complete(self):
-        if self.__confirmation:
-            self.__confirmation.complete()
-            self.__confirmation = None
-
-    def defer(self):
-        if self.__confirmation:
-            self.__confirmation.defer()
-            self.__confirmation = None
-
-
 class MessageDispatcher(object):
-    def dispatch(self, message):
+    def dispatch(self, transport_message):
         raise NotImplementedError

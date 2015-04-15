@@ -13,12 +13,11 @@
 # limitations under the License.
 
 import simplejson
+import uuid
 
 from simplebus.config import Config
 from simplebus.consumers import ConsumerRegistry
-from simplebus.enums import DeliveryMode
 from simplebus.transports import create_transport
-from simplebus.transports.core import Message
 
 
 class Bus(object):
@@ -44,22 +43,28 @@ class Bus(object):
         producer_cls.bus = self
         return producer_cls
 
-    def send(self, queue, message, expiration=None, endpoint=None):
+    def send(self, queue, message, expires=None, endpoint=None):
         self.__check_started()
 
-        body = simplejson.dumps(message)
-        msg = Message(body, DeliveryMode.persistent, expiration)
-
         transport = self._get_transport(endpoint)
+
+        msg = transport.create_message()
+        msg.id = str(uuid.uuid4())
+        msg.body = simplejson.dumps(message)
+        msg.expires = expires
+
         transport.send_queue(queue, msg)
 
-    def publish(self, topic, message, expiration=None, endpoint=None):
+    def publish(self, topic, message, expires=None, endpoint=None):
         self.__check_started()
 
-        body = simplejson.dumps(message)
-        msg = Message(body, DeliveryMode.persistent, expiration)
-
         transport = self._get_transport(endpoint)
+
+        msg = transport.create_message()
+        msg.id = str(uuid.uuid4())
+        msg.body = simplejson.dumps(message)
+        msg.expires = expires
+
         transport.send_topic(topic, msg)
 
     def start(self):

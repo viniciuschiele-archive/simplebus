@@ -16,11 +16,9 @@ import time
 import uuid
 
 from amqpstorm import UriConnection
-from simplebus.enums import DeliveryMode
 from simplebus.transports.core import Cancellation
 from simplebus.transports.core import Transport
-from simplebus.transports.core import Confirmation
-from simplebus.transports.core import Message
+from simplebus.transports.core import TransportMessage
 from threading import Lock
 from threading import Thread
 
@@ -51,6 +49,9 @@ class AmqpTransport(Transport):
         self.__connection.close()
         self.__connection = None
 
+    def create_message(self):
+        return AmqpMessage()
+
     def create_queue(self, queue):
         with self.get_channel() as channel:
             channel.queue.declare(queue, durable=True)
@@ -77,8 +78,8 @@ class AmqpTransport(Transport):
         self.__consumers[consumer.id] = consumer
         return AmqpCancellation(self, consumer.id)
 
-    def subscribe_topic(self, topic, dispatcher):
-        consumer = AmqpConsumer(self, None, topic, dispatcher)
+    def subscribe_topic(self, topic, dispatcher, **options):
+        consumer = AmqpConsumer(self, None, topic, dispatcher, **options)
         consumer.subscribe()
         self.__consumers[consumer.id] = consumer
         return AmqpCancellation(self, consumer.id)
@@ -135,16 +136,9 @@ class AmqpTransport(Transport):
             consumer.subscribe()
 
     def __send_message(self, exchange, routing_key, message):
-        properties = {
-            'app_id': None,
-            'delivery_mode': DeliveryMode.persistent if message.delivery_mode is None else message.delivery_mode.value,
-            'expiration': None if message.expiration is None else str(message.expiration),
-            'message_id': message.id,
-        }
-
         with self.get_channel() as channel:
             channel.confirm_deliveries()
-            channel.basic.publish(message.body, routing_key, exchange, properties=properties)
+            channel.basic.publish(message.body, routing_key, exchange, properties=message.properties)
 
 
 class AmqpCancellation(Cancellation):
@@ -156,23 +150,86 @@ class AmqpCancellation(Cancellation):
         self.__transport.unsubscribe(self.__id)
 
 
-class AmqpConfirmation(Confirmation):
-    def __init__(self, body, channel, method, properties):
+class AmqpMessage(TransportMessage):
+    DEFAULT_PROPERTIES = {
+        'delivery_mode': 2,  # persistent
+        'expiration': None
+    }
+
+    def __init__(self, body=None, method=None, properties=None, channel=None):
         self.__body = body
-        self.__channel = channel
         self.__method = method
-        self.__properties = properties
+        self.__properties = properties or self.DEFAULT_PROPERTIES.copy()
+        self.__channel = channel
+
+    @property
+    def id(self):
+        return str.encode(self.__properties.get('message_id'), 'utf-8')
+
+    @id.setter
+    def id(self, value):
+        self.__properties['message_id'] = value
+
+    @property
+    def body(self):
+        return self.__body
+
+    @body.setter
+    def body(self, value):
+        self.__body = value
+
+    @property
+    def delivery_count(self):
+        headers = self.__properties.get('headers')
+
+        if not headers:
+            return 0
+
+        return headers.get(bytes('x-delivery-count', 'utf-8'), 0)
+
+    @delivery_count.setter
+    def delivery_count(self, value):
+        headers = self.__properties.get('headers')
+
+        if headers is None:
+            headers = dict()
+            self.__properties['headers'] = headers
+
+        headers[bytes('x-delivery-count', 'utf-8')] = value
+
+    @property
+    def expires(self):
+        expiration = self.__properties.get('expiration')
+
+        if expiration:
+            return int(expiration)
+
+        return None
+
+    @expires.setter
+    def expires(self, value):
+        if value:
+            self.__properties['expiration'] = int(value)
+
+        self.__properties['expiration'] = None
+
+    @property
+    def properties(self):
+        return self.__properties
 
     def complete(self):
-        self.__channel.basic.ack(self.__method.get('delivery_tag'))
+        if self.__channel:
+            self.__channel.basic.ack(self.__method.get('delivery_tag'))
 
     def defer(self):
-        self.__channel.basic.publish(self.__body,
-                                     str(self.__method.get('routing_key'), encoding='utf-8'),
-                                     str(self.__method.get('exchange'), encoding='utf-8'),
-                                     self.__properties)
+        if self.__channel:
+            self.__channel.basic.ack(self.__method.get('delivery_tag'))
 
-        self.complete()
+            self.__channel.basic.publish(
+                self.__body,
+                str(self.__method.get('routing_key'), encoding='utf-8'),
+                str(self.__method.get('exchange'), encoding='utf-8'),
+                self.__properties)
 
 
 class AmqpConsumer(object):
@@ -226,25 +283,8 @@ class AmqpConsumer(object):
         except Exception as e:
             self.__transport.on_exception(e)
 
-    def __on_message(self, body, ch, method, properties):
-        message = to_message(body, ch, method, properties)
+    def __on_message(self, body, channel, method, properties):
+        message = AmqpMessage(body, method, properties, channel)
+        message.delivery_count += 1
+
         self.__dispatcher.dispatch(message)
-
-
-def to_message(body, channel, method, properties):
-    def get_property(name, default, convert=None):
-        if name in properties:
-            value = properties[name]
-            if value is not None and value != '' and convert:
-                return convert(value)
-            return value
-
-        return default
-
-    confirmation = AmqpConfirmation(body, channel, method, properties)
-
-    return Message(
-        str(body, encoding='utf-8'),
-        get_property('delivery_mode', DeliveryMode.persistent, lambda x: DeliveryMode(x)),
-        get_property('expiration', None, lambda x: int(x)),
-        confirmation)
