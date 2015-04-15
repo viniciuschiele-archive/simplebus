@@ -30,7 +30,7 @@ class AmqpTransport(Transport):
         self.__reconnection_lock = Lock()
         self.__opened = False
         self.__reconnecting = False
-        self.__consumers = {}
+        self.__listeners = {}
         self.__url = url
 
     def open(self):
@@ -63,16 +63,16 @@ class AmqpTransport(Transport):
             channel.exchange.declare(topic, 'topic', durable=True)
 
     def cancel(self, id):
-        consumer = self.__consumers.get(id)
+        listener = self.__listeners.pop(id)
 
-        if consumer:
-            consumer.unsubscribe()
+        if listener:
+            listener.cancel()
 
     def consume(self, queue, dispatcher):
-        consumer = AmqpConsumer(self, queue, None, dispatcher)
-        consumer.subscribe()
-        self.__consumers[consumer.id] = consumer
-        return AmqpCancellable(consumer.id, self)
+        listener = AmqpListener(self, queue, None, dispatcher)
+        listener.consume()
+        self.__listeners[listener.id] = listener
+        return AmqpCancellable(listener.id, self)
 
     def send(self, queue, message):
         self.create_queue(queue)
@@ -85,10 +85,10 @@ class AmqpTransport(Transport):
         self.__send_message(topic, '', message)
 
     def subscribe(self, topic, dispatcher):
-        consumer = AmqpConsumer(self, None, topic, dispatcher)
-        consumer.subscribe()
-        self.__consumers[consumer.id] = consumer
-        return AmqpCancellable(consumer.id, self)
+        listener = AmqpListener(self, None, topic, dispatcher)
+        listener.subscribe()
+        self.__listeners[listener.id] = listener
+        return AmqpCancellable(listener.id, self)
 
     def get_channel(self):
         if not self.__opened:
@@ -111,7 +111,12 @@ class AmqpTransport(Transport):
 
             self.__connection = UriConnection(self.__url)
             self.__connection.open()
-            self.__resubscribe()
+            self.__refresh_listeners()
+
+    def __send_message(self, exchange, routing_key, message):
+        with self.get_channel() as channel:
+            channel.confirm_deliveries()
+            channel.basic.publish(message.body, routing_key, exchange, properties=message.properties)
 
     def __start_reconnecting(self):
         with self.__reconnection_lock:
@@ -131,14 +136,9 @@ class AmqpTransport(Transport):
             except:
                 time.sleep(1)
 
-    def __resubscribe(self):
-        for consumer in self.__consumers:
-            consumer.subscribe()
-
-    def __send_message(self, exchange, routing_key, message):
-        with self.get_channel() as channel:
-            channel.confirm_deliveries()
-            channel.basic.publish(message.body, routing_key, exchange, properties=message.properties)
+    def __refresh_listeners(self):
+        for listener in self.__listeners:
+            listener.refresh()
 
 
 class AmqpCancellable(Cancellable):
@@ -232,7 +232,7 @@ class AmqpMessage(Message):
                 self.__properties)
 
 
-class AmqpConsumer(object):
+class AmqpListener(object):
     def __init__(self, transport, queue, topic, dispatcher):
         self.id = str(uuid.uuid4())
         self.__transport = transport
@@ -241,17 +241,11 @@ class AmqpConsumer(object):
         self.__dispatcher = dispatcher
         self.__channel = None
 
-    def subscribe(self):
-        if self.__queue:
-            self.__subscribe_queue()
-        else:
-            self.__subscribe_topic()
-
-    def unsubscribe(self):
+    def cancel(self):
         self.__channel.stop_consuming()
         self.__channel.close()
 
-    def __subscribe_queue(self):
+    def consume(self):
         self.__transport.create_queue(self.__queue)
 
         self.__channel = self.__transport.get_channel()
@@ -262,7 +256,7 @@ class AmqpConsumer(object):
         thread.daemon = True
         thread.start()
 
-    def __subscribe_topic(self):
+    def subscribe(self):
         self.__transport.create_topic(self.__topic)
 
         queue_name = self.__topic + '-' + self.id
@@ -276,6 +270,12 @@ class AmqpConsumer(object):
         thread = Thread(target=self.__start_consuming)
         thread.daemon = True
         thread.start()
+
+    def refresh(self):
+        if self.__queue:
+            self.consume()
+        else:
+            self.subscribe()
 
     def __start_consuming(self):
         try:
