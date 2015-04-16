@@ -17,6 +17,7 @@ import uuid
 
 from amqpstorm import UriConnection
 from simplebus.transports.core import Cancellable
+from simplebus.transports.core import Confirmation
 from simplebus.transports.core import Transport
 from simplebus.transports.core import Message
 from threading import Lock
@@ -148,6 +149,21 @@ class AmqpCancellable(Cancellable):
 
     def cancel(self):
         self.__transport.cancel(self.__id)
+
+
+class AmqpConfirmation(Confirmation):
+    def __init__(self, id, body, method, properties, channel):
+        self.__id = id
+        self.__body = body
+        self.__method = method
+        self.__properties = properties
+        self.__channel = channel
+
+    def complete(self):
+        pass
+
+    def defer(self):
+        pass
 
 
 class AmqpMessage(Message):
@@ -284,7 +300,18 @@ class AmqpListener(object):
             self.__transport.on_exception(e)
 
     def __on_message(self, body, channel, method, properties):
-        message = AmqpMessage(body, method, properties, channel)
+        id = properties.get('message_id')
+        delivery_count = 0
+
+        headers = properties.get('headers')
+        if headers:
+            delivery_count = int(headers.get(bytes('x-delivery-count', 'utf-8'), 0))
+
+        expires = properties.get('expiration')
+        if expires:
+            expires = int(expires)
+
+        message = Message(id, body, delivery_count, expires)
         message.delivery_count += 1
 
         self.__dispatcher.dispatch(message)

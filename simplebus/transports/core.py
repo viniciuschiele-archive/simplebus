@@ -39,38 +39,11 @@ class Transport(object):
 
 
 class Message(object):
-    abstract = True
-
-    @property
-    def id(self):
-        raise NotImplementedError
-
-    @id.setter
-    def id(self, value):
-        raise NotImplementedError
-
-    @property
-    def body(self):
-        raise NotImplementedError
-
-    @body.setter
-    def body(self, value):
-        raise NotImplementedError
-
-    @property
-    def delivery_count(self):
-        raise NotImplementedError
-
-    @delivery_count.setter
-    def delivery_count(self, value):
-        raise NotImplementedError
-
-    @property
-    def expires(self):
-        raise NotImplementedError
-
-    @expires.setter
-    def expires(self, value):
+    def __init__(self, id, body, delivery_count, expires):
+        self.id = id
+        self.body = body
+        self.delivery_count = delivery_count
+        self.expires = expires
         raise NotImplementedError
 
     def complete(self):
@@ -87,9 +60,18 @@ class Cancellable(object):
         raise NotImplementedError
 
 
+class Confirmation(object):
+    abstract = True
+
+    def complete(self):
+        raise NotImplementedError
+
+    def defer(self):
+        raise NotImplementedError
+
+
 class Dispatcher(object):
     abstract = True
 
     def dispatch(self, message):
         raise NotImplementedError
-
