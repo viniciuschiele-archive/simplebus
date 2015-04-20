@@ -12,14 +12,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 import simplejson
 
+from abc import ABCMeta
+from abc import abstractmethod
 from simplebus.state import set_current_message
-from simplebus.transports.core import Dispatcher
 
 
-class ConsumerDispatcher(Dispatcher):
-    def __init__(self, handler, max_delivery_count):
+LOGGER = logging.getLogger(__name__)
+
+
+class MessageDispatcher(metaclass=ABCMeta):
+    def __call__(self, *args, **kwargs):
+        self.dispatch(*args)
+
+    @abstractmethod
+    def dispatch(self, message):
+        pass
+
+
+class ConsumerDispatcher(MessageDispatcher):
+    def __init__(self, queue, handler, max_delivery_count):
+        self.__queue = queue
         self.__handler = handler
         self.__max_delivery_count = max_delivery_count
 
@@ -33,15 +48,18 @@ class ConsumerDispatcher(Dispatcher):
 
         try:
             self.__handler.handle(content)
-            message.complete()
         except:
+            LOGGER.exception("Error processing the message '%s' from the queue '%s'." % (message.id, self.__queue))
             message.defer()
+        else:
+            message.complete()
 
         set_current_message(None)
 
 
-class SubscriberDispatcher(Dispatcher):
-    def __init__(self, handler):
+class SubscriberDispatcher(MessageDispatcher):
+    def __init__(self, topic, handler):
+        self.__topic = topic
         self.__handler = handler
 
     def dispatch(self, message):
@@ -52,7 +70,7 @@ class SubscriberDispatcher(Dispatcher):
         try:
             self.__handler.handle(content)
         except:
-            pass
+            LOGGER.exception("Error processing the message '%s' from the topic '%s'." % (message.id, self.__topic))
 
         message.complete()
 

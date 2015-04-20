@@ -34,11 +34,11 @@ class Transport(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def consume(self, queue, dispatcher):
+    def consume(self, queue, callback):
         pass
 
     @abstractmethod
-    def subscribe(self, topic, dispatcher):
+    def subscribe(self, topic, callback):
         pass
 
 
@@ -58,12 +58,6 @@ class Confirmation(metaclass=ABCMeta):
         raise NotImplementedError
 
 
-class Dispatcher(metaclass=ABCMeta):
-    @abstractmethod
-    def dispatch(self, message):
-        pass
-
-
 class Message(object):
     def __init__(self, id=None, body=None, delivery_count=None, expires=None, confirmation=None):
         self.id = id
@@ -75,7 +69,9 @@ class Message(object):
     def complete(self):
         if self.__confirmation:
             self.__confirmation.complete()
+            self.__confirmation = None
 
     def defer(self):
         if self.__confirmation:
             self.__confirmation.defer()
+            self.__confirmation = None

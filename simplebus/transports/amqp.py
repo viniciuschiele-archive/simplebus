@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 import time
 import uuid
 
@@ -22,6 +23,9 @@ from simplebus.transports.core import Transport
 from simplebus.transports.core import Message
 from threading import Lock
 from threading import Thread
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class AmqpTransport(Transport):
@@ -50,54 +54,88 @@ class AmqpTransport(Transport):
         self.__connection.close()
         self.__connection = None
 
-    def create_queue(self, queue):
-        with self.get_channel() as channel:
-            channel.queue.declare(queue, durable=True)
-            channel.exchange.declare(queue, durable=True)
-            channel.queue.bind(queue, queue, '')
-
-    def create_topic(self, topic):
-        with self.get_channel() as channel:
-            channel.exchange.declare(topic, 'topic', durable=True)
-
     def cancel(self, id):
         listener = self.__listeners.pop(id)
 
         if listener:
-            listener.cancel()
+            listener.close_channel()
 
-    def consume(self, queue, dispatcher):
-        listener = AmqpListener(self, queue, None, dispatcher)
-        listener.consume()
+    def consume(self, queue, callback):
+        listener = ListenerData(queue, None, callback)
         self.__listeners[listener.id] = listener
+        self.__consume(listener)
         return AmqpCancellable(listener.id, self)
 
     def send(self, queue, message):
-        self.create_queue(queue)
+        self.__create_queue(queue)
 
         self.__send_message(queue, '', message)
 
     def publish(self, topic, message):
-        self.create_topic(topic)
+        self.__create_topic(topic)
 
         self.__send_message(topic, '', message)
 
-    def subscribe(self, topic, dispatcher):
-        listener = AmqpListener(self, None, topic, dispatcher)
-        listener.subscribe()
+    def subscribe(self, topic, callback):
+        listener = ListenerData(None, topic, callback)
         self.__listeners[listener.id] = listener
+        self.__subscribe(listener)
         return AmqpCancellable(listener.id, self)
 
-    def get_channel(self):
+    def __create_queue(self, queue):
+        with self.__get_channel() as channel:
+            channel.queue.declare(queue, durable=True)
+            channel.exchange.declare(queue, durable=True)
+            channel.queue.bind(queue, queue, '')
+
+    def __create_topic(self, topic):
+        with self.__get_channel() as channel:
+            channel.exchange.declare(topic, 'topic', durable=True)
+
+    def __consume(self, listener):
+        def on_message(body, channel, method, properties):
+            message = self.__to_message(body, channel, method, properties)
+            listener.callback(message)
+
+        self.__create_queue(listener.queue)
+
+        listener.close_channel()
+
+        listener.channel = self.__get_channel()
+        listener.channel.basic.qos(1)
+        listener.channel.basic.consume(on_message, listener.queue, listener.id)
+
+        thread = Thread(target=self.__start_receiving, args=(listener,))
+        thread.daemon = True
+        thread.start()
+
+    def __get_channel(self):
         if not self.__opened:
             raise RuntimeError('Transport is not opened.')
 
         self.__ensure_connection()
         return self.__connection.channel()
 
-    def on_exception(self, e):
-        if 'shutdown' in str(e):
-            self.__start_reconnecting()
+    def __subscribe(self, listener):
+        def on_message(body, channel, method, properties):
+            message = self.__to_message(body, channel, method, properties)
+            listener.callback(message)
+
+        self.__create_topic(listener.topic)
+
+        queue_name = listener.topic + '-' + listener.id
+
+        listener.close_channel()
+
+        listener.channel = self.__get_channel()
+        listener.channel.queue.declare(queue_name, exclusive=True, auto_delete=True)
+        listener.channel.queue.bind(queue_name, listener.topic)
+        listener.channel.basic.qos(1)
+        listener.channel.basic.consume(on_message, queue_name, listener.id)
+
+        thread = Thread(target=self.__start_receiving, args=(listener,))
+        thread.daemon = True
+        thread.start()
 
     def __ensure_connection(self):
         if self.__connection and self.__connection.is_open:
@@ -109,7 +147,6 @@ class AmqpTransport(Transport):
 
             self.__connection = UriConnection(self.__url)
             self.__connection.open()
-            self.__refresh_listeners()
 
     def __send_message(self, exchange, routing_key, message):
         properties = {
@@ -123,31 +160,90 @@ class AmqpTransport(Transport):
                 'x-delivery-count': message.delivery_count
             }
 
-        with self.get_channel() as channel:
+        with self.__get_channel() as channel:
             channel.confirm_deliveries()
             channel.basic.publish(message.body, routing_key, exchange, properties=properties)
+
+    def __reconnect(self):
+        count = 1
+        while self.__opened and (self.__connection is None or not self.__connection.is_open):
+            try:
+                LOGGER.warn('Attempt %s to reconnect to the broker.' % count)
+                self.__ensure_connection()
+                self.__refresh_listeners()
+                self.__reconnecting = False
+                LOGGER.info('Connection re-established to the broker.')
+            except:
+                delay = count
+
+                if delay > 10:
+                    delay = 10
+
+                time.sleep(delay)
+                count += 1
+
+    def __refresh_listeners(self):
+        for listener in self.__listeners.values():
+            try:
+                if listener.queue:
+                    self.__consume(listener)
+                else:
+                    self.__subscribe(listener)
+            except:
+                if listener.queue:
+                    LOGGER.critical('Fail listening to the queue %s.' % listener.queue, exc_info=True)
+                else:
+                    LOGGER.critical('Fail listening to the topic %s.' % listener.topic, exc_info=True)
+
+    def __start_receiving(self, listener):
+        try:
+            listener.channel.start_consuming()
+        except Exception:
+            # if 'shutdown' in str(e):
+            self.__start_reconnecting()
 
     def __start_reconnecting(self):
         with self.__reconnection_lock:
             if self.__reconnecting:
                 return
             self.__reconnecting = True
+            LOGGER.critical('Connection to the broker is down.', exc_info=True)
 
         thread = Thread(target=self.__reconnect)
         thread.daemon = True
         thread.start()
 
-    def __reconnect(self):
-        while self.__opened and (self.__connection is None or not self.__connection.is_open):
-            try:
-                self.__ensure_connection()
-                self.__reconnecting = False
-            except:
-                time.sleep(1)
+    @staticmethod
+    def __to_message(body, channel, method, properties):
+        id = properties.get('message_id')
 
-    def __refresh_listeners(self):
-        for listener in self.__listeners:
-            listener.refresh()
+        if id:
+            id = bytes.decode(properties.get('message_id'))
+        else:
+            id = None
+
+        headers = properties.get('headers')
+        if not headers:
+            headers = {}
+            properties['headers'] = headers
+
+        delivery_count = headers.get(bytes('x-delivery-count', 'utf-8'))
+        if not delivery_count:
+            delivery_count = 0
+
+        delivery_count += 1
+
+        headers[bytes('x-delivery-count', 'utf-8')] = delivery_count
+
+        expires = properties.get('expiration')
+        if expires:
+            expires = int(expires)
+
+        confirmation = AmqpConfirmation(id, body, method, properties, channel)
+
+        message = Message(id, body, delivery_count, expires, confirmation)
+
+        return message
 
 
 class AmqpCancellable(Cancellable):
@@ -182,84 +278,19 @@ class AmqpConfirmation(Confirmation):
                 self.__properties)
 
 
-class AmqpListener(object):
-    def __init__(self, transport, queue, topic, dispatcher):
+class ListenerData(object):
+    def __init__(self, queue, topic, callback):
         self.id = str(uuid.uuid4())
-        self.__transport = transport
-        self.__queue = queue
-        self.__topic = topic
-        self.__dispatcher = dispatcher
-        self.__channel = None
+        self.queue = queue
+        self.topic = topic
+        self.callback = callback
+        self.channel = None
 
-    def cancel(self):
-        self.__channel.stop_consuming()
-        self.__channel.close()
-
-    def consume(self):
-        self.__transport.create_queue(self.__queue)
-
-        self.__channel = self.__transport.get_channel()
-        self.__channel.basic.qos(1)
-        self.__channel.basic.consume(self.__on_message, self.__queue, self.id)
-
-        thread = Thread(target=self.__start_consuming)
-        thread.daemon = True
-        thread.start()
-
-    def subscribe(self):
-        self.__transport.create_topic(self.__topic)
-
-        queue_name = self.__topic + '-' + self.id
-
-        self.__channel = self.__transport.get_channel()
-        self.__channel.queue.declare(queue_name, exclusive=True, auto_delete=True)
-        self.__channel.queue.bind(queue_name, self.__topic)
-        self.__channel.basic.qos(1)
-        self.__channel.basic.consume(self.__on_message, queue_name, self.id)
-
-        thread = Thread(target=self.__start_consuming)
-        thread.daemon = True
-        thread.start()
-
-    def refresh(self):
-        if self.__queue:
-            self.consume()
-        else:
-            self.subscribe()
-
-    def __start_consuming(self):
+    def close_channel(self):
         try:
-            self.__channel.start_consuming()
-        except Exception as e:
-            self.__transport.on_exception(e)
+            if self.channel:
+                self.channel.close()
+                self.channel = None
+        except:
+            pass
 
-    def __on_message(self, body, channel, method, properties):
-        id = properties.get('message_id')
-
-        if id:
-            id = bytes.decode(properties.get('message_id'))
-        else:
-            id = None
-
-        headers = properties.get('headers')
-        if not headers:
-            headers = {}
-            properties['headers'] = headers
-
-        delivery_count = headers.get(bytes('x-delivery-count', 'utf-8'))
-        if not delivery_count:
-            delivery_count = 0
-
-        delivery_count += 1
-
-        headers[bytes('x-delivery-count', 'utf-8')] = delivery_count
-
-        expires = properties.get('expiration')
-        if expires:
-            expires = int(expires)
-
-        confirmation = AmqpConfirmation(id, body, method, properties, channel)
-
-        message = Message(id, body, delivery_count, expires, confirmation)
-
-        self.__dispatcher.dispatch(message)

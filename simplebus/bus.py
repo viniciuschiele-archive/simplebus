@@ -42,7 +42,7 @@ class Bus(object):
 
         handler = self.__get_handler(handler)
         transport = self.__get_transport(endpoint)
-        dispatcher = ConsumerDispatcher(handler, max_delivery_count)
+        dispatcher = ConsumerDispatcher(queue, handler, max_delivery_count)
         cancellation = transport.consume(queue, dispatcher)
         self.__cancellations.append(cancellation)
 
@@ -65,7 +65,7 @@ class Bus(object):
 
         handler = self.__get_handler(handler)
         transport = self.__get_transport(endpoint)
-        dispatcher = SubscriberDispatcher(handler)
+        dispatcher = SubscriberDispatcher(topic, handler)
         cancellation = transport.subscribe(topic, dispatcher)
         self.__cancellations.append(cancellation)
 
