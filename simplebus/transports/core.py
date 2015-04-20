@@ -12,65 +12,70 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from abc import ABCMeta
+from abc import abstractmethod
 
-class Transport(object):
-    abstract = True
 
+class Transport(metaclass=ABCMeta):
+    @abstractmethod
     def open(self):
-        raise NotImplementedError
+        pass
 
+    @abstractmethod
     def close(self):
-        raise NotImplementedError
+        pass
 
+    @abstractmethod
     def send(self, queue, message):
-        raise NotImplementedError
+        pass
 
+    @abstractmethod
     def publish(self, topic, message):
-        raise NotImplementedError
+        pass
 
+    @abstractmethod
     def consume(self, queue, dispatcher):
+        pass
+
+    @abstractmethod
+    def subscribe(self, topic, dispatcher):
+        pass
+
+
+class Cancellable(metaclass=ABCMeta):
+    @abstractmethod
+    def cancel(self):
+        pass
+
+
+class Confirmation(metaclass=ABCMeta):
+    @abstractmethod
+    def complete(self):
         raise NotImplementedError
 
-    def subscribe(self, topic, dispatcher):
+    @abstractmethod
+    def defer(self):
         raise NotImplementedError
+
+
+class Dispatcher(metaclass=ABCMeta):
+    @abstractmethod
+    def dispatch(self, message):
+        pass
 
 
 class Message(object):
     def __init__(self, id=None, body=None, delivery_count=None, expires=None, confirmation=None):
         self.id = id
         self.body = body
-        self.delivery_count = delivery_count
+        self.delivery_count = 0 if delivery_count is None else delivery_count
         self.expires = expires
-        self.confirmation = confirmation
+        self.__confirmation = confirmation
 
     def complete(self):
-        if self.confirmation:
-            self.confirmation.complete()
+        if self.__confirmation:
+            self.__confirmation.complete()
 
     def defer(self):
-        if self.confirmation:
-            self.confirmation.defer()
-
-
-class Cancellable(object):
-    abstract = True
-
-    def cancel(self):
-        raise NotImplementedError
-
-
-class Confirmation(object):
-    abstract = True
-
-    def complete(self):
-        raise NotImplementedError
-
-    def defer(self):
-        raise NotImplementedError
-
-
-class Dispatcher(object):
-    abstract = True
-
-    def dispatch(self, message):
-        raise NotImplementedError
+        if self.__confirmation:
+            self.__confirmation.defer()

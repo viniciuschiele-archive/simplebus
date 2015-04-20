@@ -113,12 +113,15 @@ class AmqpTransport(Transport):
 
     def __send_message(self, exchange, routing_key, message):
         properties = {
+            'message_id': message.id,
             'delivery_mode': 2,
             'expiration': None if message.expires is None else str(message.expires),
-            'headers': {
+        }
+
+        if message.delivery_count > 0:
+            properties['headers'] = {
                 'x-delivery-count': message.delivery_count
             }
-        }
 
         with self.get_channel() as channel:
             channel.confirm_deliveries()
@@ -130,7 +133,7 @@ class AmqpTransport(Transport):
                 return
             self.__reconnecting = True
 
-        thread = Thread(target=self.__ensure_connection)
+        thread = Thread(target=self.__reconnect)
         thread.daemon = True
         thread.start()
 
@@ -163,80 +166,6 @@ class AmqpConfirmation(Confirmation):
         self.__method = method
         self.__properties = properties
         self.__channel = channel
-
-    def complete(self):
-        pass
-
-    def defer(self):
-        pass
-
-
-class AmqpMessage(Message):
-    DEFAULT_PROPERTIES = {
-        'delivery_mode': 2,  # persistent
-        'expiration': None
-    }
-
-    def __init__(self, body=None, method=None, properties=None, channel=None):
-        self.__body = body
-        self.__method = method
-        self.__properties = properties or self.DEFAULT_PROPERTIES.copy()
-        self.__channel = channel
-
-    @property
-    def id(self):
-        return str.encode(self.__properties.get('message_id'), 'utf-8')
-
-    @id.setter
-    def id(self, value):
-        self.__properties['message_id'] = value
-
-    @property
-    def body(self):
-        return self.__body
-
-    @body.setter
-    def body(self, value):
-        self.__body = value
-
-    @property
-    def delivery_count(self):
-        headers = self.__properties.get('headers')
-
-        if not headers:
-            return 0
-
-        return headers.get(bytes('x-delivery-count', 'utf-8'), 0)
-
-    @delivery_count.setter
-    def delivery_count(self, value):
-        headers = self.__properties.get('headers')
-
-        if headers is None:
-            headers = dict()
-            self.__properties['headers'] = headers
-
-        headers[bytes('x-delivery-count', 'utf-8')] = value
-
-    @property
-    def expires(self):
-        expiration = self.__properties.get('expiration')
-
-        if expiration:
-            return int(expiration)
-
-        return None
-
-    @expires.setter
-    def expires(self, value):
-        if value:
-            self.__properties['expiration'] = int(value)
-
-        self.__properties['expiration'] = None
-
-    @property
-    def properties(self):
-        return self.__properties
 
     def complete(self):
         if self.__channel:
@@ -307,12 +236,20 @@ class AmqpListener(object):
     def __on_message(self, body, channel, method, properties):
         id = properties.get('message_id')
 
+        if id:
+            id = bytes.decode(properties.get('message_id'))
+        else:
+            id = None
+
         headers = properties.get('headers')
         if not headers:
             headers = {}
             properties['headers'] = headers
 
-        delivery_count = int(headers.get(bytes('x-delivery-count', 'utf-8'), 0))
+        delivery_count = headers.get(bytes('x-delivery-count', 'utf-8'))
+        if not delivery_count:
+            delivery_count = 0
+
         delivery_count += 1
 
         headers[bytes('x-delivery-count', 'utf-8')] = delivery_count

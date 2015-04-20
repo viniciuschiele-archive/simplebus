@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from abc import ABCMeta
+from abc import abstractmethod
 
-class MessageHandler(object):
-    abstract = True
 
+class MessageHandler(metaclass=ABCMeta):
+    @abstractmethod
     def handle(self, message):
-        raise NotImplementedError
+        pass
 
 
 class CallbackHandler(MessageHandler):

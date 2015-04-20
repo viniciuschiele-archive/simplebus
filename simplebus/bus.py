@@ -53,10 +53,10 @@ class Bus(object):
 
         transport = self.__get_transport(endpoint)
 
-        msg = transport.create_message()
-        msg.id = str(uuid.uuid4())
-        msg.body = simplejson.dumps(message)
-        msg.expires = expires
+        msg = Message(
+            id=str(uuid.uuid4()),
+            body=simplejson.dumps(message),
+            expires=expires)
 
         transport.send(queue, msg)
 
@@ -76,10 +76,9 @@ class Bus(object):
 
         transport = self.__get_transport(endpoint)
 
-        msg = Message(id)
-        msg.id = str(uuid.uuid4())
-        msg.body = simplejson.dumps(message)
-        msg.expires = expires
+        msg = Message(id=str(uuid.uuid4()),
+                      body=simplejson.dumps(message),
+                      expires=expires)
 
         transport.publish(topic, msg)
 
