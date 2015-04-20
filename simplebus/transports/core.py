@@ -22,9 +22,6 @@ class Transport(object):
     def close(self):
         raise NotImplementedError
 
-    def create_message(self):
-        raise NotImplementedError
-
     def send(self, queue, message):
         raise NotImplementedError
 
@@ -39,18 +36,20 @@ class Transport(object):
 
 
 class Message(object):
-    def __init__(self, id, body, delivery_count, expires):
+    def __init__(self, id=None, body=None, delivery_count=None, expires=None, confirmation=None):
         self.id = id
         self.body = body
         self.delivery_count = delivery_count
         self.expires = expires
-        raise NotImplementedError
+        self.confirmation = confirmation
 
     def complete(self):
-        raise NotImplementedError
+        if self.confirmation:
+            self.confirmation.complete()
 
     def defer(self):
-        raise NotImplementedError
+        if self.confirmation:
+            self.confirmation.defer()
 
 
 class Cancellable(object):

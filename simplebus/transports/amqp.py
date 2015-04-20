@@ -50,9 +50,6 @@ class AmqpTransport(Transport):
         self.__connection.close()
         self.__connection = None
 
-    def create_message(self):
-        return AmqpMessage()
-
     def create_queue(self, queue):
         with self.get_channel() as channel:
             channel.queue.declare(queue, durable=True)
@@ -115,9 +112,17 @@ class AmqpTransport(Transport):
             self.__refresh_listeners()
 
     def __send_message(self, exchange, routing_key, message):
+        properties = {
+            'delivery_mode': 2,
+            'expiration': None if message.expires is None else str(message.expires),
+            'headers': {
+                'x-delivery-count': message.delivery_count
+            }
+        }
+
         with self.get_channel() as channel:
             channel.confirm_deliveries()
-            channel.basic.publish(message.body, routing_key, exchange, properties=message.properties)
+            channel.basic.publish(message.body, routing_key, exchange, properties=properties)
 
     def __start_reconnecting(self):
         with self.__reconnection_lock:
@@ -301,17 +306,23 @@ class AmqpListener(object):
 
     def __on_message(self, body, channel, method, properties):
         id = properties.get('message_id')
-        delivery_count = 0
 
         headers = properties.get('headers')
-        if headers:
-            delivery_count = int(headers.get(bytes('x-delivery-count', 'utf-8'), 0))
+        if not headers:
+            headers = {}
+            properties['headers'] = headers
+
+        delivery_count = int(headers.get(bytes('x-delivery-count', 'utf-8'), 0))
+        delivery_count += 1
+
+        headers[bytes('x-delivery-count', 'utf-8')] = delivery_count
 
         expires = properties.get('expiration')
         if expires:
             expires = int(expires)
 
-        message = Message(id, body, delivery_count, expires)
-        message.delivery_count += 1
+        confirmation = AmqpConfirmation(id, body, method, properties, channel)
+
+        message = Message(id, body, delivery_count, expires, confirmation)
 
         self.__dispatcher.dispatch(message)
