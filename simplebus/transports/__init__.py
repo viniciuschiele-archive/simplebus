@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from simplebus.transports.core import AlwaysOpenTransport
 from simplebus.utils import import_string
 
 
@@ -33,5 +34,7 @@ def create_transport(url):
 
     cls = import_string(class_name)
 
-    return cls(url)
+    transport = cls(url)
+
+    return AlwaysOpenTransport(transport)
 
