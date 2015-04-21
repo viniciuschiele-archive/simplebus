@@ -12,10 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+try:
+    import amqpstorm
+except ImportError:
+    amqpstorm = None
+
 import logging
 import uuid
 
-from amqpstorm import UriConnection
 from simplebus.transports.core import Cancellable
 from simplebus.transports.core import Confirmation
 from simplebus.transports.core import Transport
@@ -29,6 +33,9 @@ LOGGER = logging.getLogger(__name__)
 
 class AmqpTransport(Transport):
     def __init__(self, url):
+        if amqpstorm is None:
+            raise ImportError('Missing amqp-storm library (pip install amqp-storm)')
+
         self.__connection = None
         self.__connection_lock = Lock()
         self.__closed_lock = Lock()
@@ -121,14 +128,14 @@ class AmqpTransport(Transport):
         return self.__connection.channel()
 
     def __ensure_connection(self):
-        if self.__connection and self.__connection.is_open:
+        if self.is_open:
             return
 
         with self.__connection_lock:
-            if self.__connection and self.__connection.is_open:
+            if self.is_open:
                 return
 
-            self.__connection = UriConnection(self.__url)
+            self.__connection = amqpstorm.UriConnection(self.__url)
             self.__connection.open()
 
     def __on_exception(self, exc):

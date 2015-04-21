@@ -1,8 +1,8 @@
-from distutils.core import setup
+from setuptools import setup
 
 setup(
     name='simplebus',
-    version='0.3.0',
+    version='0.3.2',
     packages=[
         'simplebus',
         'simplebus.transports'],
@@ -10,6 +10,8 @@ setup(
     license='Apache 2.0',
     author='Vinicius Chiele',
     author_email='vinicius.chiele@gmail.com',
-    description='A simple message bus for python',
-    install_requires=['amqp-storm']
+    description='A simple message bus for python 3',
+    keywords=['simplebus', 'messagebus', 'message bus',
+              'messaging', 'queue', 'topic', 'pubsub'],
+    install_requires=['simplejson>=3.6.5']
 )

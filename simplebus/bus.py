@@ -106,8 +106,8 @@ class Bus(object):
         transport.publish(topic, msg)
 
     def __check_started(self):
-        if not self.__started:
-            raise RuntimeError('Bus must be started first.')
+        if not self.is_started:
+            raise RuntimeError('Bus must be started.')
 
     @staticmethod
     def __get_handler(handler):
