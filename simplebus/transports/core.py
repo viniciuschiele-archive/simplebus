@@ -18,6 +18,7 @@ import uuid
 
 from abc import ABCMeta
 from abc import abstractmethod
+from simplebus.utils import EventHandler
 from threading import Thread
 
 
@@ -25,7 +26,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 class Transport(metaclass=ABCMeta):
-    closed = None
+    def __init__(self):
+        self.closed = EventHandler(self)
 
     @property
     @abstractmethod
@@ -57,23 +59,7 @@ class Transport(metaclass=ABCMeta):
         pass
 
 
-class Cancellable(metaclass=ABCMeta):
-    @abstractmethod
-    def cancel(self):
-        pass
-
-
-class Confirmation(metaclass=ABCMeta):
-    @abstractmethod
-    def complete(self):
-        raise NotImplementedError
-
-    @abstractmethod
-    def defer(self):
-        raise NotImplementedError
-
-
-class Message(object):
+class TransportMessage(object):
     def __init__(self, id=None, body=None, delivery_count=0, expires=None, confirmation=None):
         self.id = id
         self.body = body
@@ -92,12 +78,30 @@ class Message(object):
             self.__confirmation = None
 
 
+class Cancellable(metaclass=ABCMeta):
+    @abstractmethod
+    def cancel(self):
+        pass
+
+
+class Confirmation(metaclass=ABCMeta):
+    @abstractmethod
+    def complete(self):
+        pass
+
+    @abstractmethod
+    def defer(self):
+        pass
+
+
 class AlwaysOpenTransport(Transport):
     def __init__(self, transport):
+        super().__init__()
+
         self.__is_open = False
         self.__listeners = {}
         self.__transport = transport
-        self.__transport.closed = self.__on_closed
+        self.__transport.closed += self.__on_closed
 
     @property
     def is_open(self):
@@ -148,8 +152,7 @@ class AlwaysOpenTransport(Transport):
                 raise
 
     def __on_closed(self):
-        if self.closed:
-            self.close()
+        self.closed()
 
         self.__start_reconnecting()
 

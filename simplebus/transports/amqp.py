@@ -23,7 +23,7 @@ import uuid
 from simplebus.transports.core import Cancellable
 from simplebus.transports.core import Confirmation
 from simplebus.transports.core import Transport
-from simplebus.transports.core import Message
+from simplebus.transports.core import TransportMessage
 from threading import Lock
 from threading import Thread
 
@@ -35,6 +35,8 @@ class AmqpTransport(Transport):
     def __init__(self, url):
         if amqpstorm is None:
             raise ImportError('Missing amqp-storm library (pip install amqp-storm)')
+
+        super().__init__()
 
         self.__connection = None
         self.__connection_lock = Lock()
@@ -201,7 +203,7 @@ class AmqpTransport(Transport):
 
         confirmation = AmqpConfirmation(id, body, method, properties, channel)
 
-        message = Message(id, body, delivery_count, expires, confirmation)
+        message = TransportMessage(id, body, delivery_count, expires, confirmation)
 
         return message
 

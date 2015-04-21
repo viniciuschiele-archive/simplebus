@@ -23,7 +23,7 @@ from simplebus.handlers import CallbackHandler
 from simplebus.handlers import MessageHandler
 from simplebus.state import set_current_bus
 from simplebus.transports import create_transport
-from simplebus.transports.core import Message
+from simplebus.transports.core import TransportMessage
 
 
 class Bus(object):
@@ -76,10 +76,7 @@ class Bus(object):
 
         transport = self.__get_transport(endpoint)
 
-        msg = Message(
-            id=str(uuid.uuid4()),
-            body=simplejson.dumps(message),
-            expires=expires)
+        msg = TransportMessage(id=str(uuid.uuid4()), body=simplejson.dumps(message), expires=expires)
 
         transport.send(queue, msg)
 
@@ -99,9 +96,7 @@ class Bus(object):
 
         transport = self.__get_transport(endpoint)
 
-        msg = Message(id=str(uuid.uuid4()),
-                      body=simplejson.dumps(message),
-                      expires=expires)
+        msg = TransportMessage(id=str(uuid.uuid4()), body=simplejson.dumps(message), expires=expires)
 
         transport.publish(topic, msg)
 
