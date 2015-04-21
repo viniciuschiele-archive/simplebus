@@ -61,7 +61,7 @@ class Bus(object):
         set_current_bus(None)
 
     def consume(self, queue, handler, max_delivery_count=3, endpoint=None):
-        self.__check_started()
+        self.__ensure_started()
 
         handler = self.__get_handler(handler)
         transport = self.__get_transport(endpoint)
@@ -72,7 +72,7 @@ class Bus(object):
         return cancellation
 
     def send(self, queue, message, expires=None, endpoint=None):
-        self.__check_started()
+        self.__ensure_started()
 
         transport = self.__get_transport(endpoint)
 
@@ -84,7 +84,7 @@ class Bus(object):
         transport.send(queue, msg)
 
     def subscribe(self, topic, handler, endpoint=None):
-        self.__check_started()
+        self.__ensure_started()
 
         handler = self.__get_handler(handler)
         transport = self.__get_transport(endpoint)
@@ -95,7 +95,7 @@ class Bus(object):
         return cancellation
 
     def publish(self, topic, message, expires=None, endpoint=None):
-        self.__check_started()
+        self.__ensure_started()
 
         transport = self.__get_transport(endpoint)
 
@@ -105,9 +105,9 @@ class Bus(object):
 
         transport.publish(topic, msg)
 
-    def __check_started(self):
+    def __ensure_started(self):
         if not self.is_started:
-            raise RuntimeError('Bus must be started.')
+            self.start()
 
     @staticmethod
     def __get_handler(handler):
