@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import logging
-import time
 import uuid
 
 from amqpstorm import UriConnection
@@ -34,7 +33,6 @@ class AmqpTransport(Transport):
         self.__connection_lock = Lock()
         self.__closed_lock = Lock()
         self.__closed_called = False
-        self.__opened = False
         self.__url = url
 
     @property
@@ -42,18 +40,16 @@ class AmqpTransport(Transport):
         return self.__connection and self.__connection.is_open
 
     def open(self):
-        if self.__opened:
+        if self.is_open:
             return
 
-        self.__opened = True
         self.__closed_called = False
         self.__ensure_connection()
 
     def close(self):
-        if not self.__opened:
+        if not self.is_open:
             return
 
-        self.__opened = False
         self.__connection.close()
         self.__connection = None
 
@@ -74,16 +70,14 @@ class AmqpTransport(Transport):
         thread.daemon = True
         thread.start()
 
-        return AmqpCancellable(channel, self)
+        return AmqpCancellable(channel)
 
     def send(self, queue, message):
         self.__create_queue(queue)
-
         self.__send_message(queue, '', message)
 
     def publish(self, topic, message):
         self.__create_topic(topic)
-
         self.__send_message(topic, '', message)
 
     def subscribe(self, topic, callback):
@@ -107,7 +101,7 @@ class AmqpTransport(Transport):
         thread.daemon = True
         thread.start()
 
-        return AmqpCancellable(channel, self)
+        return AmqpCancellable(channel)
 
     def __create_queue(self, queue):
         with self.__get_channel() as channel:
@@ -120,7 +114,7 @@ class AmqpTransport(Transport):
             channel.exchange.declare(topic, 'topic', durable=True)
 
     def __get_channel(self):
-        if not self.__opened:
+        if not self.is_open:
             raise RuntimeError('Transport is not opened.')
 
         self.__ensure_connection()
@@ -138,6 +132,9 @@ class AmqpTransport(Transport):
             self.__connection.open()
 
     def __on_exception(self, exc):
+        if not self.closed:
+            return
+
         if self.__closed_called:
             return
 
@@ -203,12 +200,11 @@ class AmqpTransport(Transport):
 
 
 class AmqpCancellable(Cancellable):
-    def __init__(self, id, transport):
-        self.__id = id
-        self.__transport = transport
+    def __init__(self, channel):
+        self.__channel = channel
 
     def cancel(self):
-        self.__transport.cancel(self.__id)
+        self.__channel.close()
 
 
 class AmqpConfirmation(Confirmation):
@@ -233,20 +229,4 @@ class AmqpConfirmation(Confirmation):
                 str(self.__method.get('exchange'), encoding='utf-8'),
                 self.__properties)
 
-
-class ListenerData(object):
-    def __init__(self, queue, topic, callback):
-        self.id = str(uuid.uuid4())
-        self.queue = queue
-        self.topic = topic
-        self.callback = callback
-        self.channel = None
-
-    def close_channel(self):
-        try:
-            if self.channel:
-                self.channel.close()
-                self.channel = None
-        except:
-            pass
 

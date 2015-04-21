@@ -32,9 +32,9 @@ def create_transport(url):
     if class_name is None:
         raise ValueError('Invalid schema %s.' % schema)
 
-    cls = import_string(class_name)
+    transport_cls = import_string(class_name)
 
-    transport = cls(url)
+    transport = transport_cls(url)
 
     return AlwaysOpenTransport(transport)
 

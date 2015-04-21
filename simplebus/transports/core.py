@@ -14,6 +14,7 @@
 
 import logging
 import time
+import uuid
 
 from abc import ABCMeta
 from abc import abstractmethod
@@ -26,8 +27,8 @@ LOGGER = logging.getLogger(__name__)
 class Transport(metaclass=ABCMeta):
     closed = None
 
-    @abstractmethod
     @property
+    @abstractmethod
     def is_open(self):
         pass
 
@@ -73,10 +74,10 @@ class Confirmation(metaclass=ABCMeta):
 
 
 class Message(object):
-    def __init__(self, id=None, body=None, delivery_count=None, expires=None, confirmation=None):
+    def __init__(self, id=None, body=None, delivery_count=0, expires=None, confirmation=None):
         self.id = id
         self.body = body
-        self.delivery_count = 0 if delivery_count is None else delivery_count
+        self.delivery_count = delivery_count
         self.expires = expires
         self.__confirmation = confirmation
 
@@ -93,9 +94,10 @@ class Message(object):
 
 class AlwaysOpenTransport(Transport):
     def __init__(self, transport):
+        self.__is_open = False
+        self.__listeners = {}
         self.__transport = transport
         self.__transport.closed = self.__on_closed
-        self.__is_open = False
 
     @property
     def is_open(self):
@@ -116,13 +118,40 @@ class AlwaysOpenTransport(Transport):
         self.__transport.publish(topic, message)
 
     def consume(self, queue, callback):
-        self.__transport.consume(queue, callback)
+        listener = self._Listener(queue, None, callback, AlwaysOpenCancellable())
+        self.__consume(listener)
+        self.__listeners[listener.id] = listener
+        return listener.cancellable
 
     def subscribe(self, topic, callback):
-        self.__transport.subscribe(topic, callback)
+        listener = self._Listener(None, topic, callback, AlwaysOpenCancellable())
+        self.__subscribe(listener)
+        self.__listeners[listener.id] = listener
+        return listener.cancellable
+
+    def __consume(self, listener, silent=False):
+        try:
+            listener.cancellable._cancellable = self.__transport.consume(listener.queue, listener.callback)
+        except:
+            LOGGER.critical('Fail consuming the queue %s.' % listener.queue, exc_info=True)
+
+            if not silent:
+                raise
+
+    def __subscribe(self, listener, silent=False):
+        try:
+            listener.cancellable._cancellable = self.__transport.subscribe(listener.topic, listener.callback)
+        except:
+            LOGGER.critical('Fail subscribing the topic %s.' % listener.topic, exc_info=True)
+
+            if not silent:
+                raise
 
     def __on_closed(self):
-        pass
+        if self.closed:
+            self.close()
+
+        self.__start_reconnecting()
 
     def __reopen(self):
         count = 1
@@ -130,6 +159,7 @@ class AlwaysOpenTransport(Transport):
             try:
                 LOGGER.warn('Attempt %s to reconnect to the broker.' % count)
                 self.__transport.open()
+                self.__start_listeners()
                 LOGGER.info('Connection re-established to the broker.')
             except:
                 delay = count
@@ -146,3 +176,26 @@ class AlwaysOpenTransport(Transport):
         thread = Thread(target=self.__reopen)
         thread.daemon = True
         thread.start()
+
+    def __start_listeners(self):
+        for listener in self.__listeners.values():
+            if listener.queue:
+                self.__consume(listener, silent=True)
+            else:
+                self.__subscribe(listener, silent=True)
+
+    class _Listener(object):
+        def __init__(self, queue, topic, callback, cancellable):
+            self.id = str(uuid.uuid4())
+            self.queue = queue
+            self.topic = topic
+            self.callback = callback
+            self.cancellable = cancellable
+
+
+class AlwaysOpenCancellable(Cancellable):
+    def __init__(self):
+        self._cancellable = None
+
+    def cancel(self):
+        self._cancellable.cancel()

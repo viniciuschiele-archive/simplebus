@@ -37,6 +37,29 @@ class Bus(object):
     def is_started(self):
         return self.__started
 
+    def start(self):
+        for endpoint in self.config.endpoints.items():
+            transport = create_transport(endpoint[1])
+            transport.open()
+            self.__transports[endpoint[0]] = transport
+
+        self.__started = True
+
+        set_current_bus(self)
+
+    def stop(self):
+        self.__started = False
+
+        for cancellation in self.__cancellations:
+            cancellation.cancel()
+        self.__cancellations.clear()
+
+        for transport in self.__transports.values():
+            transport.close()
+        self.__transports.clear()
+
+        set_current_bus(None)
+
     def consume(self, queue, handler, max_delivery_count=3, endpoint=None):
         self.__check_started()
 
@@ -81,29 +104,6 @@ class Bus(object):
                       expires=expires)
 
         transport.publish(topic, msg)
-
-    def start(self):
-        for endpoint in self.config.endpoints.items():
-            transport = create_transport(endpoint[1])
-            transport.open()
-            self.__transports[endpoint[0]] = transport
-
-        self.__started = True
-
-        set_current_bus(self)
-
-    def stop(self):
-        self.__started = False
-
-        for cancellation in self.__cancellations:
-            cancellation.cancel()
-        self.__cancellations.clear()
-
-        for transport in self.__transports.values():
-            transport.close()
-        self.__transports.clear()
-
-        set_current_bus(None)
 
     def __check_started(self):
         if not self.__started:
