@@ -14,7 +14,6 @@
 
 import logging
 import time
-import uuid
 
 from abc import ABCMeta
 from abc import abstractmethod
@@ -27,7 +26,7 @@ LOGGER = logging.getLogger(__name__)
 
 class Transport(metaclass=ABCMeta):
     def __init__(self):
-        self.closed = EventHandler(self)
+        self.closed = EventHandler()
 
     @property
     @abstractmethod
@@ -43,7 +42,15 @@ class Transport(metaclass=ABCMeta):
         pass
 
     @abstractmethod
+    def cancel(self, id):
+        pass
+
+    @abstractmethod
     def send(self, queue, message):
+        pass
+
+    @abstractmethod
+    def consume(self, id, queue, callback):
         pass
 
     @abstractmethod
@@ -51,45 +58,24 @@ class Transport(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def consume(self, queue, callback):
+    def subscribe(self, id, topic, callback):
         pass
 
     @abstractmethod
-    def subscribe(self, topic, callback):
+    def unsubscribe(self, id):
         pass
 
 
-class TransportMessage(object):
-    def __init__(self, id=None, body=None, delivery_count=0, expires=None, confirmation=None):
+class Message(object):
+    def __init__(self, id=None, body=None, delivery_count=0, expires=None):
         self.id = id
         self.body = body
         self.delivery_count = delivery_count
         self.expires = expires
-        self.__confirmation = confirmation
 
-    def complete(self):
-        if self.__confirmation:
-            self.__confirmation.complete()
-            self.__confirmation = None
-
-    def defer(self):
-        if self.__confirmation:
-            self.__confirmation.defer()
-            self.__confirmation = None
-
-
-class Cancellable(metaclass=ABCMeta):
-    @abstractmethod
-    def cancel(self):
-        pass
-
-
-class Confirmation(metaclass=ABCMeta):
-    @abstractmethod
     def complete(self):
         pass
 
-    @abstractmethod
     def defer(self):
         pass
 
@@ -99,7 +85,8 @@ class AlwaysOpenTransport(Transport):
         super().__init__()
 
         self.__is_open = False
-        self.__listeners = {}
+        self.__cancellations = {}
+        self.__subscriptions = {}
         self.__transport = transport
         self.__transport.closed += self.__on_closed
 
@@ -115,41 +102,29 @@ class AlwaysOpenTransport(Transport):
         self.__transport.open()
         self.__is_open = True
 
+    def cancel(self, id):
+        cancellation = self.__cancellations.pop(id)
+        if cancellation:
+            self.__transport.cancel(id)
+
     def send(self, queue, message):
         self.__transport.send(queue, message)
+
+    def consume(self, id, queue, callback):
+        self.__cancellations[id] = (queue, callback)
+        self.__transport.consume(id, queue, callback)
 
     def publish(self, topic, message):
         self.__transport.publish(topic, message)
 
-    def consume(self, queue, callback):
-        listener = self._Listener(queue, None, callback, AlwaysOpenCancellable())
-        self.__consume(listener)
-        self.__listeners[listener.id] = listener
-        return listener.cancellable
+    def subscribe(self, id, topic, callback):
+        self.__subscriptions[id] = (topic, callback)
+        self.__transport.subscribe(id, topic, callback)
 
-    def subscribe(self, topic, callback):
-        listener = self._Listener(None, topic, callback, AlwaysOpenCancellable())
-        self.__subscribe(listener)
-        self.__listeners[listener.id] = listener
-        return listener.cancellable
-
-    def __consume(self, listener, silent=False):
-        try:
-            listener.cancellable._cancellable = self.__transport.consume(listener.queue, listener.callback)
-        except:
-            LOGGER.critical('Fail consuming the queue %s.' % listener.queue, exc_info=True)
-
-            if not silent:
-                raise
-
-    def __subscribe(self, listener, silent=False):
-        try:
-            listener.cancellable._cancellable = self.__transport.subscribe(listener.topic, listener.callback)
-        except:
-            LOGGER.critical('Fail subscribing the topic %s.' % listener.topic, exc_info=True)
-
-            if not silent:
-                raise
+    def unsubscribe(self, id):
+        subscriber = self.__subscriptions.pop(id)
+        if subscriber:
+            self.__transport.unsubscribe(id)
 
     def __on_closed(self):
         self.closed()
@@ -162,7 +137,8 @@ class AlwaysOpenTransport(Transport):
             try:
                 LOGGER.warn('Attempt %s to reconnect to the broker.' % count)
                 self.__transport.open()
-                self.__start_listeners()
+                self.__revive_cancellations()
+                self.__revive_subscriptions()
                 LOGGER.info('Connection re-established to the broker.')
             except:
                 delay = count
@@ -180,25 +156,24 @@ class AlwaysOpenTransport(Transport):
         thread.daemon = True
         thread.start()
 
-    def __start_listeners(self):
-        for listener in self.__listeners.values():
-            if listener.queue:
-                self.__consume(listener, silent=True)
-            else:
-                self.__subscribe(listener, silent=True)
+    def __revive_cancellations(self):
+        for cancellation in self.__cancellations.items():
+            id = cancellation[0]
+            queue = cancellation[1][0]
+            callback = cancellation[1][1]
 
-    class _Listener(object):
-        def __init__(self, queue, topic, callback, cancellable):
-            self.id = str(uuid.uuid4())
-            self.queue = queue
-            self.topic = topic
-            self.callback = callback
-            self.cancellable = cancellable
+            try:
+                self.consume(id, queue, callback)
+            except:
+                LOGGER.critical('Fail consuming the queue %s.' % queue, exc_info=True)
 
+    def __revive_subscriptions(self):
+        for subscription in self.__subscriptions.items():
+            id = subscription[0]
+            topic = subscription[1][0]
+            callback = subscription[1][1]
 
-class AlwaysOpenCancellable(Cancellable):
-    def __init__(self):
-        self._cancellable = None
-
-    def cancel(self):
-        self._cancellable.cancel()
+            try:
+                self.subscribe(id, topic, callback)
+            except:
+                LOGGER.critical('Fail subscribing the topic %s.' % topic, exc_info=True)

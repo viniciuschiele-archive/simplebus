@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from simplebus.bus import Bus
+from simplebus.cancellables import Cancellable
 from simplebus.config import Config
 from simplebus.decorators import consume
 from simplebus.decorators import subscribe

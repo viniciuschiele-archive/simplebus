@@ -56,9 +56,8 @@ class EventHandler(object):
     """A simple event handling class, which manages callbacks to be
     executed.
     """
-    def __init__(self, sender):
+    def __init__(self):
         self.callbacks = []
-        self.sender = sender
 
     def __call__(self, *args):
         """Executes all callbacks.
@@ -67,7 +66,7 @@ class EventHandler(object):
         passing the sender of the EventHandler as first argument and the
         optional args as second, third, ... argument to them.
         """
-        return [callback(self.sender, *args) for callback in self.callbacks]
+        return [callback(*args) for callback in self.callbacks]
 
     def __iadd__(self, callback):
         """Adds a callback to the EventHandler."""

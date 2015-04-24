@@ -17,13 +17,15 @@ import simplejson
 import uuid
 
 from simplebus.config import Config
+from simplebus.cancellables import Cancellation
+from simplebus.cancellables import Subscription
 from simplebus.dispatchers import ConsumerDispatcher
 from simplebus.dispatchers import SubscriberDispatcher
 from simplebus.handlers import CallbackHandler
 from simplebus.handlers import MessageHandler
 from simplebus.state import set_current_bus
 from simplebus.transports import create_transport
-from simplebus.transports.core import TransportMessage
+from simplebus.transports.core import Message
 
 
 class Bus(object):
@@ -60,45 +62,43 @@ class Bus(object):
 
         set_current_bus(None)
 
-    def consume(self, queue, handler, max_delivery_count=3, endpoint=None):
-        self.__ensure_started()
-
-        handler = self.__get_handler(handler)
-        transport = self.__get_transport(endpoint)
-        dispatcher = ConsumerDispatcher(queue, handler, max_delivery_count)
-        cancellation = transport.consume(queue, dispatcher)
-        self.__cancellations.append(cancellation)
-
-        return cancellation
-
     def send(self, queue, message, expires=None, endpoint=None):
         self.__ensure_started()
 
         transport = self.__get_transport(endpoint)
 
-        msg = TransportMessage(id=str(uuid.uuid4()), body=simplejson.dumps(message), expires=expires)
+        msg = Message(id=str(uuid.uuid4()), body=simplejson.dumps(message), expires=expires)
 
         transport.send(queue, msg)
 
-    def subscribe(self, topic, handler, endpoint=None):
+    def consume(self, queue, callback, max_delivery_count=3, endpoint=None):
         self.__ensure_started()
 
-        handler = self.__get_handler(handler)
+        id = str(uuid.uuid4())
+        handler = self.__get_handler(callback)
         transport = self.__get_transport(endpoint)
-        dispatcher = SubscriberDispatcher(topic, handler)
-        cancellation = transport.subscribe(topic, dispatcher)
-        self.__cancellations.append(cancellation)
-
-        return cancellation
+        dispatcher = ConsumerDispatcher(queue, handler, max_delivery_count)
+        transport.consume(id, queue, dispatcher)
+        return Cancellation(id, transport)
 
     def publish(self, topic, message, expires=None, endpoint=None):
         self.__ensure_started()
 
         transport = self.__get_transport(endpoint)
 
-        msg = TransportMessage(id=str(uuid.uuid4()), body=simplejson.dumps(message), expires=expires)
+        msg = Message(id=str(uuid.uuid4()), body=simplejson.dumps(message), expires=expires)
 
         transport.publish(topic, msg)
+
+    def subscribe(self, topic, callback, endpoint=None):
+        self.__ensure_started()
+
+        id = str(uuid.uuid4())
+        handler = self.__get_handler(callback)
+        transport = self.__get_transport(endpoint)
+        dispatcher = SubscriberDispatcher(topic, handler)
+        transport.subscribe(id, topic, dispatcher)
+        return Subscription(id, transport)
 
     def __ensure_started(self):
         if not self.is_started:

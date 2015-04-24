@@ -87,6 +87,13 @@ class TestConsumer(TestCase):
 
         event.wait()
 
+    def test_cancel(self):
+        def handle(message):
+            pass
+
+        cancellation = self.bus.consume(self.queue, handle)
+        cancellation.cancel()
+
     def test_max_delivery_count(self):
         event = Event()
 
@@ -148,3 +155,10 @@ class TestSubscriber(TestCase):
         self.bus.publish(self.topic, 'hello')
 
         event.wait()
+
+    def test_unsubscribe(self):
+        def handle(message):
+            pass
+
+        subscription = self.bus.subscribe(self.topic, handle)
+        subscription.cancel()

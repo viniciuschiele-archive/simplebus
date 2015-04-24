@@ -20,10 +20,8 @@ except ImportError:
 import logging
 import uuid
 
-from simplebus.transports.core import Cancellable
-from simplebus.transports.core import Confirmation
 from simplebus.transports.core import Transport
-from simplebus.transports.core import TransportMessage
+from simplebus.transports.core import Message
 from threading import Lock
 from threading import Thread
 
@@ -43,6 +41,8 @@ class AmqpTransport(Transport):
         self.__closed_lock = Lock()
         self.__closed_called = False
         self.__url = url
+        self.__cancellations = {}
+        self.__subscriptions = {}
 
     @property
     def is_open(self):
@@ -51,8 +51,6 @@ class AmqpTransport(Transport):
     def open(self):
         if self.is_open:
             return
-
-        self.__closed_called = False
         self.__ensure_connection()
 
     def close(self):
@@ -62,14 +60,17 @@ class AmqpTransport(Transport):
         self.__connection.close()
         self.__connection = None
 
-    def consume(self, queue, callback):
+    def cancel(self, id):
+        channel = self.__cancellations.pop(id)
+        if channel:
+            channel.close()
+
+    def consume(self, id, queue, callback):
         def on_message(body, ch, method, properties):
             message = self.__to_message(body, ch, method, properties)
             callback(message)
 
         self.__create_queue(queue)
-
-        id = str(uuid.uuid4())
 
         channel = self.__get_channel()
         channel.basic.qos(1)
@@ -79,7 +80,7 @@ class AmqpTransport(Transport):
         thread.daemon = True
         thread.start()
 
-        return AmqpCancellable(channel)
+        self.__cancellations[id] = channel
 
     def send(self, queue, message):
         self.__create_queue(queue)
@@ -89,14 +90,12 @@ class AmqpTransport(Transport):
         self.__create_topic(topic)
         self.__send_message(topic, '', message)
 
-    def subscribe(self, topic, callback):
+    def subscribe(self, id, topic, callback):
         def on_message(body, ch, method, properties):
             message = self.__to_message(body, ch, method, properties)
             callback(message)
 
         self.__create_topic(topic)
-
-        id = str(uuid.uuid4())
 
         queue_name = topic + '-' + id
 
@@ -110,7 +109,12 @@ class AmqpTransport(Transport):
         thread.daemon = True
         thread.start()
 
-        return AmqpCancellable(channel)
+        self.__subscriptions[id] = channel
+
+    def unsubscribe(self, id):
+        channel = self.__subscriptions.pop(id)
+        if channel:
+            channel.close()
 
     def __create_queue(self, queue):
         with self.__get_channel() as channel:
@@ -139,6 +143,7 @@ class AmqpTransport(Transport):
 
             self.__connection = amqpstorm.UriConnection(self.__url)
             self.__connection.open()
+            self.__closed_called = False
 
     def __on_exception(self, exc):
         if not self.closed:
@@ -177,65 +182,49 @@ class AmqpTransport(Transport):
 
     @staticmethod
     def __to_message(body, channel, method, properties):
-        id = properties.get('message_id')
+        return AmqpMessage(body, method, properties, channel)
 
-        if id:
-            id = bytes.decode(properties.get('message_id'))
+
+class AmqpMessage(Message):
+    def __init__(self, body, method, properties, channel):
+        super().__init__(body=body)
+
+        self.__method = method
+        self.__properties = properties
+        self.__channel = channel
+
+        self.id = properties.get('message_id')
+        if self.id:
+            self.id = bytes.decode(properties.get('message_id'))
         else:
-            id = None
+            self.id = None
 
         headers = properties.get('headers')
         if not headers:
             headers = {}
             properties['headers'] = headers
 
-        delivery_count = headers.get(bytes('x-delivery-count', 'utf-8'))
-        if not delivery_count:
-            delivery_count = 0
+        self.delivery_count = headers.get(bytes('x-delivery-count', 'utf-8'))
+        if not self.delivery_count:
+            self.delivery_count = 0
+        self.delivery_count += 1
 
-        delivery_count += 1
-
-        headers[bytes('x-delivery-count', 'utf-8')] = delivery_count
-
-        expires = properties.get('expiration')
-        if expires:
-            expires = int(expires)
-
-        confirmation = AmqpConfirmation(id, body, method, properties, channel)
-
-        message = TransportMessage(id, body, delivery_count, expires, confirmation)
-
-        return message
-
-
-class AmqpCancellable(Cancellable):
-    def __init__(self, channel):
-        self.__channel = channel
-
-    def cancel(self):
-        self.__channel.close()
-
-
-class AmqpConfirmation(Confirmation):
-    def __init__(self, id, body, method, properties, channel):
-        self.__id = id
-        self.__body = body
-        self.__method = method
-        self.__properties = properties
-        self.__channel = channel
+        headers[bytes('x-delivery-count', 'utf-8')] = self.delivery_count
+        self.expires = self.__properties.get('expiration')
+        if self.expires:
+            self.expires = int(self.expires)
 
     def complete(self):
         if self.__channel:
             self.__channel.basic.ack(self.__method.get('delivery_tag'))
+            self.__channel = None
 
     def defer(self):
         if self.__channel:
             self.__channel.basic.ack(self.__method.get('delivery_tag'))
 
             self.__channel.basic.publish(
-                self.__body,
+                self.body,
                 str(self.__method.get('routing_key'), encoding='utf-8'),
                 str(self.__method.get('exchange'), encoding='utf-8'),
                 self.__properties)
-
-
