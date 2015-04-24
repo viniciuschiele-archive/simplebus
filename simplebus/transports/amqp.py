@@ -18,7 +18,6 @@ except ImportError:
     amqpstorm = None
 
 import logging
-import uuid
 
 from simplebus.transports.core import Transport
 from simplebus.transports.core import Message
@@ -70,9 +69,8 @@ class AmqpTransport(Transport):
             message = self.__to_message(body, ch, method, properties)
             callback(message)
 
-        self.__create_queue(queue)
-
         channel = self.__get_channel()
+        self.__create_queue(channel, queue)
         channel.basic.qos(1)
         channel.basic.consume(on_message, queue, id)
 
@@ -83,23 +81,40 @@ class AmqpTransport(Transport):
         self.__cancellations[id] = channel
 
     def send(self, queue, message):
-        self.__create_queue(queue)
-        self.__send_message(queue, '', message)
+        with self.__get_channel() as channel:
+            try:
+                self.__send_message(channel, queue, '', message)
+                return
+            except amqpstorm.AMQPChannelError as e:
+                if 'NOT_FOUND' not in str(e):
+                    raise e
+
+        with self.__get_channel() as channel:
+            self.__create_queue(channel, queue)
+            self.__send_message(channel, queue, '', message)
 
     def publish(self, topic, message):
-        self.__create_topic(topic)
-        self.__send_message(topic, '', message)
+        with self.__get_channel() as channel:
+            try:
+                self.__send_message(channel, topic, '', message)
+                return
+            except amqpstorm.AMQPChannelError as e:
+                if 'NOT_FOUND' not in str(e):
+                    raise e
+
+        with self.__get_channel() as channel:
+            self.__create_topic(channel, topic)
+            self.__send_message(channel, topic, '', message)
 
     def subscribe(self, id, topic, callback):
         def on_message(body, ch, method, properties):
             message = self.__to_message(body, ch, method, properties)
             callback(message)
 
-        self.__create_topic(topic)
-
         queue_name = topic + '-' + id
 
         channel = self.__get_channel()
+        self.__create_topic(channel, topic)
         channel.queue.declare(queue_name, exclusive=True, auto_delete=True)
         channel.queue.bind(queue_name, topic)
         channel.basic.qos(1)
@@ -116,15 +131,15 @@ class AmqpTransport(Transport):
         if channel:
             channel.close()
 
-    def __create_queue(self, queue):
-        with self.__get_channel() as channel:
-            channel.queue.declare(queue, durable=True)
-            channel.exchange.declare(queue, durable=True)
-            channel.queue.bind(queue, queue, '')
+    @staticmethod
+    def __create_queue(channel, queue):
+        channel.queue.declare(queue, durable=True)
+        channel.exchange.declare(queue, durable=True)
+        channel.queue.bind(queue, queue, '')
 
-    def __create_topic(self, topic):
-        with self.__get_channel() as channel:
-            channel.exchange.declare(topic, 'topic', durable=True)
+    @staticmethod
+    def __create_topic(channel, topic):
+        channel.exchange.declare(topic, 'topic', durable=True)
 
     def __get_channel(self):
         if not self.is_open:
@@ -158,7 +173,8 @@ class AmqpTransport(Transport):
             self.__closed_called = True
             self.closed()
 
-    def __send_message(self, exchange, routing_key, message):
+    @staticmethod
+    def __send_message(channel, exchange, routing_key, message):
         properties = {
             'message_id': message.id,
             'delivery_mode': 2,
@@ -170,9 +186,8 @@ class AmqpTransport(Transport):
                 'x-delivery-count': message.delivery_count
             }
 
-        with self.__get_channel() as channel:
-            channel.confirm_deliveries()
-            channel.basic.publish(message.body, routing_key, exchange, properties=properties)
+        channel.confirm_deliveries()
+        channel.basic.publish(message.body, routing_key, exchange, properties=properties)
 
     def __start_receiving(self, channel):
         try:
