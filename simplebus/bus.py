@@ -105,14 +105,14 @@ class Bus(object):
             self.start()
 
     @staticmethod
-    def __get_handler(handler):
-        if isinstance(handler, MessageHandler):
-            return handler
+    def __get_handler(callback):
+        if isinstance(callback, MessageHandler):
+            return callback
 
-        if inspect.isfunction(handler):
-            return CallbackHandler(handler)
+        if inspect.isfunction(callback):
+            return CallbackHandler(callback)
 
-        raise TypeError('Parameter handler must be a MessageHandler class or a method.')
+        raise TypeError('Parameter handler must be an instance of MessageHandler or a function.')
 
     def __get_transport(self, endpoint):
         if endpoint is None:
