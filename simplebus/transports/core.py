@@ -46,11 +46,11 @@ class Transport(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def send(self, queue, message):
+    def push(self, queue, message):
         pass
 
     @abstractmethod
-    def consume(self, id, queue, callback):
+    def pull(self, id, queue, callback):
         pass
 
     @abstractmethod
@@ -107,12 +107,12 @@ class AlwaysOpenTransport(Transport):
         if cancellation:
             self.__transport.cancel(id)
 
-    def send(self, queue, message):
-        self.__transport.send(queue, message)
+    def push(self, queue, message):
+        self.__transport.push(queue, message)
 
-    def consume(self, id, queue, callback):
+    def pull(self, id, queue, callback):
         self.__cancellations[id] = (queue, callback)
-        self.__transport.consume(id, queue, callback)
+        self.__transport.pull(id, queue, callback)
 
     def publish(self, topic, message):
         self.__transport.publish(topic, message)

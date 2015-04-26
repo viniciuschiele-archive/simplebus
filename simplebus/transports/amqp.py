@@ -64,7 +64,20 @@ class AmqpTransport(Transport):
         if channel:
             channel.close()
 
-    def consume(self, id, queue, callback):
+    def push(self, queue, message):
+        with self.__get_channel() as channel:
+            try:
+                self.__send_message(channel, queue, '', message)
+                return
+            except amqpstorm.AMQPChannelError as e:
+                if 'NOT_FOUND' not in str(e):
+                    raise e
+
+        with self.__get_channel() as channel:
+            self.__create_queue(channel, queue)
+            self.__send_message(channel, queue, '', message)
+
+    def pull(self, id, queue, callback):
         def on_message(body, ch, method, properties):
             message = self.__to_message(body, ch, method, properties)
             callback(message)
@@ -79,19 +92,6 @@ class AmqpTransport(Transport):
         thread.start()
 
         self.__cancellations[id] = channel
-
-    def send(self, queue, message):
-        with self.__get_channel() as channel:
-            try:
-                self.__send_message(channel, queue, '', message)
-                return
-            except amqpstorm.AMQPChannelError as e:
-                if 'NOT_FOUND' not in str(e):
-                    raise e
-
-        with self.__get_channel() as channel:
-            self.__create_queue(channel, queue)
-            self.__send_message(channel, queue, '', message)
 
     def publish(self, topic, message):
         with self.__get_channel() as channel:

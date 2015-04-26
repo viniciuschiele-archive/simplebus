@@ -14,9 +14,9 @@
 
 from simplebus import Bus
 from simplebus import Config
-from simplebus import consume
 from simplebus import current_message
 from simplebus import MessageHandler
+from simplebus import pull
 from simplebus import subscribe
 from threading import Event
 from unittest import TestCase
@@ -36,7 +36,7 @@ class TestConfig(TestCase):
         SIMPLEBUS = {
             'endpoints': {
                 'default': 'amqp://test:test@localhost/'
-            }
+            },
         }
 
 
@@ -58,20 +58,20 @@ class TestConsumer(TestCase):
                 self.assertEqual('hello', message)
                 event.set()
 
-        self.bus.consume(self.queue, Handler1())
-        self.bus.send(self.queue, 'hello')
+        self.bus.pull(self.queue, Handler1())
+        self.bus.push(self.queue, 'hello')
 
         event.wait()
 
     def test_consumer_as_decorator(self):
         event = Event()
 
-        @consume(self.queue)
+        @pull(self.queue)
         def handle(message):
             self.assertEqual('hello', message)
             event.set()
 
-        self.bus.send(self.queue, 'hello')
+        self.bus.push(self.queue, 'hello')
 
         event.wait()
 
@@ -82,8 +82,8 @@ class TestConsumer(TestCase):
             self.assertEqual('hello', message)
             event.set()
 
-        self.bus.consume(self.queue, handle)
-        self.bus.send(self.queue, 'hello')
+        self.bus.pull(self.queue, handle)
+        self.bus.push(self.queue, 'hello')
 
         event.wait()
 
@@ -91,7 +91,7 @@ class TestConsumer(TestCase):
         def handle(message):
             pass
 
-        cancellation = self.bus.consume(self.queue, handle)
+        cancellation = self.bus.pull(self.queue, handle)
         cancellation.cancel()
 
     def test_max_delivery_count(self):
@@ -103,8 +103,8 @@ class TestConsumer(TestCase):
                 raise RuntimeError('error')
             event.set()
 
-        self.bus.consume(self.queue, handle)
-        self.bus.send(self.queue, 'hello')
+        self.bus.pull(self.queue, handle)
+        self.bus.push(self.queue, 'hello')
 
         event.wait()
 

@@ -32,7 +32,7 @@ class MessageDispatcher(metaclass=ABCMeta):
         pass
 
 
-class ConsumerDispatcher(MessageDispatcher):
+class PullerDispatcher(MessageDispatcher):
     def __init__(self, queue, handler, max_delivery_count):
         self.__queue = queue
         self.__handler = handler
@@ -40,6 +40,7 @@ class ConsumerDispatcher(MessageDispatcher):
 
     def dispatch(self, message):
         if message.delivery_count > self.__max_delivery_count:
+            # message.dead_letter()
             message.complete()
 
         content = simplejson.loads(message.body)
@@ -49,7 +50,7 @@ class ConsumerDispatcher(MessageDispatcher):
         try:
             self.__handler.handle(content)
         except:
-            LOGGER.exception("Error processing the message '%s' from the queue '%s'." % (message.id, self.__queue))
+            LOGGER.exception("Error processing message '%s' from the queue '%s'." % (message.id, self.__queue))
             message.defer()
         else:
             message.complete()
