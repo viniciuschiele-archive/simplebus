@@ -28,12 +28,10 @@ class Config(object):
 
     def from_object(self, obj):
         """Load values from an object."""
-        if not hasattr(obj, 'SIMPLEBUS'):
-            raise RuntimeError('Configuration object must have SIMPLEBUS attribute.')
+        if not hasattr(obj, 'SIMPLEBUS_ENDPOINTS'):
+            raise RuntimeError('Configuration object must have SIMPLEBUS_ENDPOINTS attribute.')
 
-        config = getattr(obj, 'SIMPLEBUS')
-
-        self.endpoints = config.get('endpoints')
+        self.endpoints = getattr(obj, 'SIMPLEBUS_ENDPOINTS')
 
         if not self.endpoints:
             raise RuntimeError('Configuration object must have at least one endpoint')

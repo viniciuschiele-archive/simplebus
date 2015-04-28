@@ -33,10 +33,8 @@ class TestConfig(TestCase):
         self.assertEqual('amqp://test:test@localhost/', config.endpoints.get('default'))
 
     class CustomConfig(object):
-        SIMPLEBUS = {
-            'endpoints': {
-                'default': 'amqp://test:test@localhost/'
-            },
+        SIMPLEBUS_ENDPOINTS = {
+            'default': 'amqp://test:test@localhost/'
         }
 
 
