@@ -40,6 +40,9 @@ class Bus(object):
         return self.__started
 
     def start(self):
+        if len(self.config.endpoints) == 0:
+            raise RuntimeError('SimpleBus must have at least one endpoint')
+
         for endpoint in self.config.endpoints.items():
             transport = create_transport(endpoint[1])
             transport.open()

@@ -22,16 +22,25 @@ class Config(object):
     """
 
     DEFAULT_ENDPOINTS = {'default': 'amqp://guest:guest@localhost/'}
+    DEFAULT_QUEUES = {
+        '*': {
+            'dead_letter_enabled': True,
+            'dead_letter_name': None,
+            'message_expiration': None,
+            'max_delivery_count': 3,
+            'redelivery_delay': 1000
+        }
+    }
 
     def __init__(self):
         self.endpoints = self.DEFAULT_ENDPOINTS.copy()
+        self.queues = self.DEFAULT_QUEUES.copy()
 
     def from_object(self, obj):
         """Load values from an object."""
-        if not hasattr(obj, 'SIMPLEBUS_ENDPOINTS'):
-            raise RuntimeError('Configuration object must have SIMPLEBUS_ENDPOINTS attribute.')
 
-        self.endpoints = getattr(obj, 'SIMPLEBUS_ENDPOINTS')
+        if hasattr(obj, 'SIMPLEBUS_ENDPOINTS'):
+            self.endpoints = getattr(obj, 'SIMPLEBUS_ENDPOINTS')
 
-        if not self.endpoints:
-            raise RuntimeError('Configuration object must have at least one endpoint')
+        if hasattr(obj, 'SIMPLEBUS_QUEUES'):
+            self.queues = getattr(obj, 'SIMPLEBUS_QUEUES')
