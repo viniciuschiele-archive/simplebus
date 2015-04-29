@@ -77,13 +77,13 @@ class AmqpTransport(Transport):
             self.__create_queue(channel, queue)
             self.__send_message(channel, queue, '', message)
 
-    def pull(self, id, queue, callback):
+    def pull(self, id, queue, callback, options):
         def on_message(body, ch, method, properties):
             message = self.__to_message(body, ch, method, properties)
             callback(message)
 
         channel = self.__get_channel()
-        self.__create_queue(channel, queue)
+        self.__create_queue(channel, queue, options)
         channel.basic.qos(1)
         channel.basic.consume(on_message, queue, id)
 
@@ -132,8 +132,19 @@ class AmqpTransport(Transport):
             channel.close()
 
     @staticmethod
-    def __create_queue(channel, queue):
-        channel.queue.declare(queue, durable=True)
+    def __create_queue(channel, queue, options):
+        dead_letter_enabled = options.get('dead_letter_enabled')
+        dead_letter_name = options.get('dead_letter_name') or queue + '.error'
+
+        queue_args = None
+
+        if dead_letter_enabled:
+            channel.queue.declare(dead_letter_name, durable=True)
+            channel.exchange.declare(dead_letter_name, durable=True)
+            channel.queue.bind(dead_letter_name, dead_letter_name, '')
+            queue_args = {'x-dead-letter-exchange': dead_letter_name}
+
+        channel.queue.declare(queue, durable=True, arguments=queue_args)
         channel.exchange.declare(queue, durable=True)
         channel.queue.bind(queue, queue, '')
 
@@ -243,3 +254,8 @@ class AmqpMessage(Message):
                 str(self.__method.get('routing_key'), encoding='utf-8'),
                 str(self.__method.get('exchange'), encoding='utf-8'),
                 self.__properties)
+
+    def reject(self):
+        if self.__channel:
+            self.__channel.basic.reject(self.__method.get('delivery_tag'), requeue=False)
+            self.__channel = None

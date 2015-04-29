@@ -50,7 +50,7 @@ class Transport(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def pull(self, id, queue, callback):
+    def pull(self, id, queue, callback, options):
         pass
 
     @abstractmethod
@@ -110,9 +110,9 @@ class AlwaysOpenTransport(Transport):
     def push(self, queue, message):
         self.__transport.push(queue, message)
 
-    def pull(self, id, queue, callback):
-        self.__cancellations[id] = (queue, callback)
-        self.__transport.pull(id, queue, callback)
+    def pull(self, id, queue, callback, options):
+        self.__cancellations[id] = (queue, callback, options)
+        self.__transport.pull(id, queue, callback, options)
 
     def publish(self, topic, message):
         self.__transport.publish(topic, message)
@@ -161,11 +161,12 @@ class AlwaysOpenTransport(Transport):
             id = cancellation[0]
             queue = cancellation[1][0]
             callback = cancellation[1][1]
+            options = cancellation[1][2]
 
             try:
-                self.consume(id, queue, callback)
+                self.pull(id, queue, callback, options)
             except:
-                LOGGER.critical('Fail consuming the queue %s.' % queue, exc_info=True)
+                LOGGER.critical('Fail pulling the queue %s.' % queue, exc_info=True)
 
     def __revive_subscriptions(self):
         for subscription in self.__subscriptions.items():

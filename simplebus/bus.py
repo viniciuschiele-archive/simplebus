@@ -31,6 +31,7 @@ from simplebus.transports.core import Message
 class Bus(object):
     def __init__(self):
         self.__cancellations = []
+        self.__queue_options = {}
         self.__started = False
         self.__transports = {}
         self.config = Config()
@@ -77,14 +78,15 @@ class Bus(object):
 
         transport.push(queue, msg)
 
-    def pull(self, queue, callback, max_delivery_count=3, endpoint=None):
+    def pull(self, queue, callback, endpoint=None):
         self.__ensure_started()
 
         id = str(uuid.uuid4())
         handler = self.__get_handler(callback)
         transport = self.__get_transport(endpoint)
-        dispatcher = PullerDispatcher(queue, handler, max_delivery_count)
-        transport.pull(id, queue, dispatcher)
+        dispatcher = PullerDispatcher(queue, handler, 3)
+        options = self.__get_queue_options(queue)
+        transport.pull(id, queue, dispatcher, options)
         return Cancellation(id, transport)
 
     def publish(self, topic, message, endpoint=None):
@@ -125,6 +127,25 @@ class Bus(object):
             return CallbackHandler(callback)
 
         raise TypeError('Parameter handler must be an instance of MessageHandler or a function.')
+
+    def __get_queue_options(self, queue):
+        options = self.__queue_options.get(queue)
+
+        if options:
+            return options
+
+        default_options = self.config.queues.get('*') or Config.DEFAULT_QUEUES.get('*')
+        queue_options = self.config.queues.get(queue)
+
+        options = default_options.copy()
+
+        if queue_options:
+            for k, v in queue_options.items():
+                options[k] = v
+
+        self.__queue_options[queue] = options
+
+        return options
 
     def __get_transport(self, endpoint):
         if endpoint is None:

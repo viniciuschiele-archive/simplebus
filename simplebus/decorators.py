@@ -15,9 +15,9 @@
 from simplebus.state import current_bus
 
 
-def pull(queue, max_delivery_count=3, endpoint=None):
+def pull(queue, endpoint=None):
     def decorator(cls_or_func):
-        current_bus.pull(queue, cls_or_func, max_delivery_count, endpoint)
+        current_bus.pull(queue, cls_or_func, endpoint)
         return cls_or_func
     return decorator
 

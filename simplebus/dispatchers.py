@@ -40,8 +40,7 @@ class PullerDispatcher(MessageDispatcher):
 
     def dispatch(self, message):
         if message.delivery_count > self.__max_delivery_count:
-            # message.dead_letter()
-            message.complete()
+            message.reject()
 
         content = simplejson.loads(message.body)
 
