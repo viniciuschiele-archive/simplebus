@@ -25,10 +25,9 @@ class Config(object):
     DEFAULT_QUEUES = {
         '*': {
             'dead_letter_enabled': True,
-            'dead_letter_name': None,
             'message_expiration': None,
-            'max_delivery_count': 3,
-            'redelivery_delay': 1000
+            'max_retry_count': 3,
+            'retry_delay': 1000
         }
     }
 

@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import uuid
+
 from simplebus import Bus
 from simplebus import Config
 from simplebus import current_message
@@ -38,7 +40,7 @@ class TestConfig(TestCase):
         }
 
 
-class TestConsumer(TestCase):
+class TestPuller(TestCase):
     queue = 'tests.queue1'
 
     def setUp(self):
@@ -61,7 +63,7 @@ class TestConsumer(TestCase):
 
         event.wait()
 
-    def test_consumer_as_decorator(self):
+    def test_pull_as_decorator(self):
         event = Event()
 
         @pull(self.queue)
@@ -73,7 +75,7 @@ class TestConsumer(TestCase):
 
         event.wait()
 
-    def test_consumer_as_function(self):
+    def test_pull_as_function(self):
         event = Event()
 
         def handle(message):
@@ -95,14 +97,18 @@ class TestConsumer(TestCase):
     def test_max_delivery_count(self):
         event = Event()
 
+        key = str(uuid.uuid4())
+
         def handle(message):
-            self.assertEqual('hello', message)
-            if current_message.delivery_count != 3:
-                raise RuntimeError('error')
+            raise RuntimeError('error')
+
+        def handle_error(message):
+            self.assertEqual(key, message)
             event.set()
 
-        self.bus.pull(self.queue, handle)
-        self.bus.push(self.queue, 'hello')
+        self.bus.pull(self.queue, handle, retry_delay=0)
+        self.bus.pull(self.queue + '.error', handle_error, dead_letter_enabled=False, max_retry_count=0)
+        self.bus.push(self.queue, key)
 
         event.wait()
 

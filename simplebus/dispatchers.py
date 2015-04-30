@@ -33,15 +33,11 @@ class MessageDispatcher(metaclass=ABCMeta):
 
 
 class PullerDispatcher(MessageDispatcher):
-    def __init__(self, queue, handler, max_delivery_count):
+    def __init__(self, queue, handler):
         self.__queue = queue
         self.__handler = handler
-        self.__max_delivery_count = max_delivery_count
 
     def dispatch(self, message):
-        if message.delivery_count > self.__max_delivery_count:
-            message.reject()
-
         content = simplejson.loads(message.body)
 
         set_current_message(message)

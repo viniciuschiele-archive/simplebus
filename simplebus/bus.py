@@ -78,14 +78,14 @@ class Bus(object):
 
         transport.push(queue, msg)
 
-    def pull(self, queue, callback, endpoint=None):
+    def pull(self, queue, callback, endpoint=None, **options):
         self.__ensure_started()
 
         id = str(uuid.uuid4())
         handler = self.__get_handler(callback)
         transport = self.__get_transport(endpoint)
-        dispatcher = PullerDispatcher(queue, handler, 3)
-        options = self.__get_queue_options(queue)
+        options = self.__get_queue_options(queue, options)
+        dispatcher = PullerDispatcher(queue, handler)
         transport.pull(id, queue, dispatcher, options)
         return Cancellation(id, transport)
 
@@ -128,24 +128,28 @@ class Bus(object):
 
         raise TypeError('Parameter handler must be an instance of MessageHandler or a function.')
 
-    def __get_queue_options(self, queue):
-        options = self.__queue_options.get(queue)
+    def __get_queue_options(self, queue, options):
+        queue_options = self.__queue_options.get(queue)
+
+        if not queue_options:
+            default_options = self.config.queues.get('*') or Config.DEFAULT_QUEUES.get('*')
+            config_options = self.config.queues.get(queue)
+
+            queue_options = default_options.copy()
+
+            if config_options:
+                for k, v in config_options.items():
+                    queue_options[k] = v
+
+            self.__queue_options[queue] = queue_options
 
         if options:
-            return options
+            queue_options = queue_options.copy()
 
-        default_options = self.config.queues.get('*') or Config.DEFAULT_QUEUES.get('*')
-        queue_options = self.config.queues.get(queue)
+            for k, v in options.items():
+                queue_options[k] = v
 
-        options = default_options.copy()
-
-        if queue_options:
-            for k, v in queue_options.items():
-                options[k] = v
-
-        self.__queue_options[queue] = options
-
-        return options
+        return queue_options
 
     def __get_transport(self, endpoint):
         if endpoint is None:

@@ -67,20 +67,23 @@ class Transport(metaclass=ABCMeta):
 
 
 class Message(object):
-    def __init__(self, id=None, body=None, delivery_count=0, expires=None):
+    def __init__(self, id=None, body=None, retry_count=0, expires=None):
         self.id = id
         self.body = body
-        self.delivery_count = delivery_count
+        self.retry_count = retry_count
         self.expires = expires
 
     def complete(self):
+        pass
+
+    def dead_letter(self, reason):
         pass
 
     def defer(self):
         pass
 
 
-class AlwaysOpenTransport(Transport):
+class RecoveryAwareTransport(Transport):
     def __init__(self, transport):
         super().__init__()
 
