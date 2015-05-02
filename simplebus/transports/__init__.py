@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from simplebus.transports.core import RecoveryAwareTransport
+from simplebus.transports.base import RecoveryAwareTransport
 from simplebus.utils import import_string
 
 
 TRANSPORT_ALIASES = {
-    'amqp': 'simplebus.transports.amqp.AmqpTransport',
+    'amqp': 'simplebus.transports.amqp.Transport',
 }
 
 

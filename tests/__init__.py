@@ -11,3 +11,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+from simplebus import Bus
+
+
+def create_bus():
+    bus = Bus()
+    bus.config.from_object(BusConfig())
+    return bus
+
+
+class BusConfig(object):
+    SIMPLEBUS_QUEUES = {
+        '*': {
+            'dead_letter_enabled': False,
+            'max_retry_count': 0
+        }
+    }

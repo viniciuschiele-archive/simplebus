@@ -66,20 +66,48 @@ class Transport(metaclass=ABCMeta):
         pass
 
 
-class Message(object):
-    def __init__(self, id=None, body=None, retry_count=0, expires=None):
-        self.id = id
-        self.body = body
-        self.retry_count = retry_count
-        self.expires = expires
+class TransportMessage(object):
+    def __init__(self, message_id=None, body=None, expiration=None):
+        self._message_id = message_id
+        self._body = body
+        self._expiration = expiration
+        self._retry_count = 0
 
-    def complete(self):
+    @property
+    def message_id(self):
+        return self._message_id
+
+    @message_id.setter
+    def message_id(self, value):
+        self._message_id = value
+
+    @property
+    def body(self):
+        return self._body
+
+    @body.setter
+    def body(self, value):
+        self._body = value
+
+    @property
+    def expiration(self):
+        return self._expiration
+
+    @expiration.setter
+    def expiration(self, value):
+        self._expiration = value
+
+    @property
+    def retry_count(self):
+        return self._retry_count
+
+    def delete(self):
         pass
 
     def dead_letter(self, reason):
         pass
 
-    def defer(self):
+    def retry(self):
         pass
 
 

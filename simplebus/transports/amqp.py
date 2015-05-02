@@ -19,8 +19,7 @@ except ImportError:
 
 import logging
 
-from simplebus.transports.core import Transport
-from simplebus.transports.core import Message
+from simplebus.transports import base
 from threading import Lock
 from threading import Thread
 
@@ -28,7 +27,7 @@ from threading import Thread
 LOGGER = logging.getLogger(__name__)
 
 
-class AmqpTransport(Transport):
+class Transport(base.Transport):
     def __init__(self, url):
         if amqpstorm is None:
             raise ImportError('Missing amqp-storm library (pip install amqp-storm)')
@@ -65,15 +64,15 @@ class AmqpTransport(Transport):
             channel.close()
 
     def push(self, queue, message):
-        with self.__get_channel() as channel:
-            self.__send_message(channel, '', queue, message)
+        self.__send_message('', queue, message)
 
     def pull(self, id, queue, callback, options):
-        dead_letter_queue = None
+        dead_letter_queue = queue + '.error'
         dead_letter_enabled = options.get('dead_letter_enabled')
+
+        retry_queue = queue + '.retry'
         max_retry_count = options.get('max_retry_count')
         retry_delay = options.get('retry_delay')
-        retry_queue = None
 
         def on_message(body, ch, method, properties):
             message = self.__to_message(body, ch, method, properties, dead_letter_queue, retry_queue)
@@ -83,17 +82,14 @@ class AmqpTransport(Transport):
             else:
                 callback(message)
 
-        channel = self.__get_channel()
-        channel.queue.declare(queue, durable=True)
+        if max_retry_count and retry_delay > 0:
+            self.__create_retry_queue(queue, retry_queue, retry_delay)
 
         if dead_letter_enabled:
-            dead_letter_queue = queue + '.error'
-            channel.queue.declare(dead_letter_queue, durable=True)
+            self.__create_dead_letter_queue(dead_letter_queue)
 
-        if max_retry_count and retry_delay > 0:
-            retry_queue = queue + '.retry'
-            channel.queue.declare(retry_queue, durable=True)
-
+        channel = self.__get_channel()
+        channel.queue.declare(queue, durable=True)
         channel.basic.qos(1)
         channel.basic.consume(on_message, queue, id)
 
@@ -104,17 +100,7 @@ class AmqpTransport(Transport):
         self.__cancellations[id] = channel
 
     def publish(self, topic, message):
-        with self.__get_channel() as channel:
-            try:
-                self.__send_message(channel, topic, '', message)
-                return
-            except amqpstorm.AMQPChannelError as e:
-                if 'NOT_FOUND' not in str(e):
-                    raise e
-
-        with self.__get_channel() as channel:
-            self.__create_topic(channel, topic)
-            self.__send_message(channel, topic, '', message)
+        self.__send_message(topic, '', message)
 
     def subscribe(self, id, topic, callback):
         def on_message(body, ch, method, properties):
@@ -124,7 +110,7 @@ class AmqpTransport(Transport):
         queue_name = topic + '-' + id
 
         channel = self.__get_channel()
-        self.__create_topic(channel, topic)
+        channel.exchange.declare(topic, 'topic', durable=True)
         channel.queue.declare(queue_name, exclusive=True, auto_delete=True)
         channel.queue.bind(queue_name, topic)
         channel.basic.qos(1)
@@ -141,9 +127,22 @@ class AmqpTransport(Transport):
         if channel:
             channel.close()
 
-    @staticmethod
-    def __create_topic(channel, topic):
-        channel.exchange.declare(topic, 'topic', durable=True)
+    def __create_dead_letter_queue(self, dead_letter_queue):
+        with self.__get_channel() as channel:
+            channel.queue.declare(dead_letter_queue, durable=True)
+
+    def __create_retry_queue(self, queue, retry_queue, retry_delay):
+        args = {
+            'x-dead-letter-exchange': '',
+            'x-dead-letter-routing-key': queue,
+            'x-message-ttl': retry_delay}
+
+        try:
+            with self.__get_channel() as channel:
+                channel.queue.declare(retry_queue, durable=True, arguments=args)
+        except amqpstorm.AMQPChannelError as e:
+            if 'x-message-ttl' not in str(e):
+                raise
 
     def __get_channel(self):
         if not self.is_open:
@@ -177,12 +176,11 @@ class AmqpTransport(Transport):
             self.__closed_called = True
             self.closed()
 
-    @staticmethod
-    def __send_message(channel, exchange, routing_key, message):
+    def __send_message(self, exchange, routing_key, message):
         properties = {
-            'message_id': message.id,
+            'message_id': message.message_id,
             'delivery_mode': 2,
-            'expiration': None if message.expires is None else str(message.expires),
+            'expiration': None if message.expiration is None else str(message.expiration),
         }
 
         if message.retry_count > 0:
@@ -190,8 +188,9 @@ class AmqpTransport(Transport):
                 'x-retry-count': message.retry_count
             }
 
-        channel.confirm_deliveries()
-        channel.basic.publish(message.body, routing_key, exchange, properties=properties)
+        with self.__get_channel() as channel:
+            channel.confirm_deliveries()
+            channel.basic.publish(message.body, routing_key, exchange, mandatory=True, properties=properties)
 
     def __start_receiving(self, channel):
         try:
@@ -201,38 +200,35 @@ class AmqpTransport(Transport):
 
     @staticmethod
     def __to_message(body, channel, method, properties, dead_letter_queue, retry_queue):
-        return AmqpMessage(body, method, properties, channel, dead_letter_queue, retry_queue)
+        return TransportMessage(body, method, properties, channel, dead_letter_queue, retry_queue)
 
 
-class AmqpMessage(Message):
+class TransportMessage(base.TransportMessage):
     def __init__(self, body, method, properties, channel, dead_letter_queue, retry_queue):
         super().__init__(body=body)
 
         self.__method = method
         self.__properties = properties
         self.__channel = channel
+        self.__dead_letter_queue = dead_letter_queue
+        self.__retry_queue = retry_queue
 
-        self.id = properties.get('message_id')
-        if self.id:
-            self.id = bytes.decode(properties.get('message_id'))
-        else:
-            self.id = None
+        message_id = properties.get('message_id')
+        if message_id:
+            self.message_id = bytes.decode(properties.get('message_id'))
 
         headers = properties.get('headers')
         if not headers:
             headers = {}
             properties['headers'] = headers
 
-        self.retry_count = headers.get(bytes('x-retry-count', 'utf-8')) or 0
+        self._retry_count = headers.get(bytes('x-retry-count', 'utf-8')) or 0
 
-        self.expires = self.__properties.get('expiration')
-        if self.expires:
-            self.expires = int(self.expires)
+        expiration = self.__properties.get('expiration')
+        if expiration:
+            self.expiration = int(expiration)
 
-        self.__dead_letter_queue = dead_letter_queue
-        self.__retry_queue = retry_queue
-
-    def complete(self):
+    def delete(self):
         if self.__channel:
             self.__channel.basic.ack(self.__method.get('delivery_tag'))
             self.__channel = None
@@ -253,7 +249,7 @@ class AmqpMessage(Message):
                 self.__properties)
             self.__channel = None
 
-    def defer(self):
+    def retry(self):
         if self.__channel:
             self.__set_header_retry_count(self.retry_count + 1)
 

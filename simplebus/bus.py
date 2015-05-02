@@ -25,7 +25,7 @@ from simplebus.handlers import CallbackHandler
 from simplebus.handlers import MessageHandler
 from simplebus.state import set_current_bus
 from simplebus.transports import create_transport
-from simplebus.transports.core import Message
+from simplebus.transports.base import TransportMessage
 
 
 class Bus(object):
@@ -43,6 +43,8 @@ class Bus(object):
     def start(self):
         if len(self.config.endpoints) == 0:
             raise RuntimeError('SimpleBus must have at least one endpoint')
+
+        self.config.frozen()
 
         for endpoint in self.config.endpoints.items():
             transport = create_transport(endpoint[1])
@@ -66,26 +68,23 @@ class Bus(object):
 
         set_current_bus(None)
 
-    def push(self, queue, message, expires=None, endpoint=None):
+    def push(self, queue, message, **options):
         self.__ensure_started()
 
-        transport = self.__get_transport(endpoint)
+        transport = self.__get_transport(options.get('endpoint'))
 
-        msg = Message(
-            id=self.__create_message_id(),
-            body=simplejson.dumps(message),
-            expires=expires)
+        msg = TransportMessage(self.__create_message_id(), simplejson.dumps(message), options.get('expiration'))
 
-        transport.push(queue, msg)
+        transport.push(queue, msg, **options)
 
-    def pull(self, queue, callback, endpoint=None, **options):
+    def pull(self, queue, callback, **options):
         self.__ensure_started()
 
         id = str(uuid.uuid4())
         handler = self.__get_handler(callback)
-        transport = self.__get_transport(endpoint)
         options = self.__get_queue_options(queue, options)
         dispatcher = PullerDispatcher(queue, handler)
+        transport = self.__get_transport(options.get('endpoint'))
         transport.pull(id, queue, dispatcher, options)
         return Cancellation(id, transport)
 
@@ -94,9 +93,7 @@ class Bus(object):
 
         transport = self.__get_transport(endpoint)
 
-        msg = Message(
-            id=self.__create_message_id(),
-            body=simplejson.dumps(message))
+        msg = TransportMessage(self.__create_message_id(), simplejson.dumps(message))
 
         transport.publish(topic, msg)
 
@@ -132,10 +129,14 @@ class Bus(object):
         queue_options = self.__queue_options.get(queue)
 
         if not queue_options:
-            default_options = self.config.queues.get('*') or Config.DEFAULT_QUEUES.get('*')
-            config_options = self.config.queues.get(queue)
+            queue_options = Config.DEFAULT_QUEUES.get('*').copy()
+            config_options = self.config.queues.get('*')
 
-            queue_options = default_options.copy()
+            if config_options:
+                for k, v in config_options.items():
+                    queue_options[k] = v
+
+            config_options = self.config.queues.get(queue)
 
             if config_options:
                 for k, v in config_options.items():

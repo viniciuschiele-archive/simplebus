@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -45,10 +45,10 @@ class PullerDispatcher(MessageDispatcher):
         try:
             self.__handler.handle(content)
         except:
-            LOGGER.exception("Error processing message '%s' from the queue '%s'." % (message.id, self.__queue))
-            message.defer()
+            LOGGER.exception("Error processing message '%s' from the queue '%s'." % (message.message_id, self.__queue))
+            message.retry()
         else:
-            message.complete()
+            message.delete()
 
         set_current_message(None)
 
@@ -66,8 +66,9 @@ class SubscriberDispatcher(MessageDispatcher):
         try:
             self.__handler.handle(content)
         except:
-            LOGGER.exception("Error processing the message '%s' from the topic '%s'." % (message.id, self.__topic))
+            LOGGER.exception(
+                "Error processing the message '%s' from the topic '%s'." % (message.message_id, self.__topic))
 
-        message.complete()
+        message.delete()
 
         set_current_message(None)

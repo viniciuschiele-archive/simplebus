@@ -12,14 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import datetime
 import uuid
 
-from simplebus import Bus
 from simplebus import Config
 from simplebus import current_message
 from simplebus import MessageHandler
 from simplebus import pull
 from simplebus import subscribe
+from tests import create_bus
 from threading import Event
 from unittest import TestCase
 
@@ -44,7 +45,7 @@ class TestPuller(TestCase):
     queue = 'tests.queue1'
 
     def setUp(self):
-        self.bus = Bus()
+        self.bus = create_bus()
         self.bus.start()
 
     def tearDown(self):
@@ -94,7 +95,7 @@ class TestPuller(TestCase):
         cancellation = self.bus.pull(self.queue, handle)
         cancellation.cancel()
 
-    def test_max_delivery_count(self):
+    def test_max_retry_count(self):
         event = Event()
 
         key = str(uuid.uuid4())
@@ -106,9 +107,31 @@ class TestPuller(TestCase):
             self.assertEqual(key, message)
             event.set()
 
-        self.bus.pull(self.queue, handle, retry_delay=0)
-        self.bus.pull(self.queue + '.error', handle_error, dead_letter_enabled=False, max_retry_count=0)
+        self.bus.pull(self.queue, handle, dead_letter_enabled=True)
+        self.bus.pull(self.queue + '.error', handle_error, dead_letter_enabled=False)
         self.bus.push(self.queue, key)
+
+        event.wait()
+
+    def test_retry_delay(self):
+        event = Event()
+
+        started_at = None
+
+        def handle(message):
+            global started_at
+            if current_message.retry_count == 0:
+                started_at = datetime.datetime.now()
+                raise RuntimeError('error')
+            elapsed = datetime.datetime.now() - started_at
+
+            event.set()
+
+            if elapsed.microseconds < 100 * 1000:
+                self.fail('Message received too early.')
+
+        self.bus.pull(self.queue, handle, max_retry_count=1, retry_delay=200)
+        self.bus.push(self.queue, 'hello')
 
         event.wait()
 
@@ -117,7 +140,7 @@ class TestSubscriber(TestCase):
     topic = 'tests.topic1'
 
     def setUp(self):
-        self.bus = Bus()
+        self.bus = create_bus()
         self.bus.start()
 
     def tearDown(self):

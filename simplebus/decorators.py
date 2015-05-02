@@ -15,9 +15,9 @@
 from simplebus.state import current_bus
 
 
-def pull(queue, endpoint=None):
+def pull(queue, **options):
     def decorator(cls_or_func):
-        current_bus.pull(queue, cls_or_func, endpoint)
+        current_bus.pull(queue, cls_or_func, **options)
         return cls_or_func
     return decorator
 
