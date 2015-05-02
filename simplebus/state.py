@@ -24,23 +24,23 @@ def get_current_bus():
     return __bus
 
 
-def get_current_message():
-    if hasattr(__local, 'current_message'):
-        return __local.current_message
-    return None
-
-
 def set_current_bus(bus):
     global __bus
     __bus = bus
 
 
-def set_current_message(message):
+def get_transport_message():
+    if hasattr(__local, 'transport_message'):
+        return __local.transport_message
+    return None
+
+
+def set_transport_message(message):
     if message:
-        __local.current_message = message
+        __local.transport_message = message
     else:
-        del __local.current_message
+        del __local.transport_message
 
 
 current_bus = Proxy(get_current_bus)
-current_message = Proxy(get_current_message)
+transport_message = Proxy(get_transport_message)

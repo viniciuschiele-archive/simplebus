@@ -179,14 +179,14 @@ class Transport(base.Transport):
     def __send_message(self, exchange, routing_key, message):
         properties = {
             'message_id': message.message_id,
-            'delivery_mode': 2,
-            'expiration': None if message.expiration is None else str(message.expiration),
+            'delivery_mode': 2
         }
 
+        if message.expiration:
+            properties['expiration'] = str(message.expiration)
+
         if message.retry_count > 0:
-            properties['headers'] = {
-                'x-retry-count': message.retry_count
-            }
+            properties['headers'] = {'x-retry-count': message.retry_count}
 
         with self.__get_channel() as channel:
             channel.confirm_deliveries()

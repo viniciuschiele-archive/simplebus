@@ -17,7 +17,7 @@ import simplejson
 
 from abc import ABCMeta
 from abc import abstractmethod
-from simplebus.state import set_current_message
+from simplebus.state import set_transport_message
 
 
 LOGGER = logging.getLogger(__name__)
@@ -37,20 +37,21 @@ class PullerDispatcher(MessageDispatcher):
         self.__queue = queue
         self.__handler = handler
 
-    def dispatch(self, message):
-        content = simplejson.loads(message.body)
+    def dispatch(self, transport_message):
+        content = simplejson.loads(transport_message.body)
 
-        set_current_message(message)
+        set_transport_message(transport_message)
 
         try:
             self.__handler.handle(content)
         except:
-            LOGGER.exception("Error processing message '%s' from the queue '%s'." % (message.message_id, self.__queue))
-            message.retry()
+            LOGGER.exception("Error processing message '%s' from the queue '%s'." %
+                             (transport_message.message_id, self.__queue))
+            transport_message.retry()
         else:
-            message.delete()
+            transport_message.delete()
 
-        set_current_message(None)
+        set_transport_message(None)
 
 
 class SubscriberDispatcher(MessageDispatcher):
@@ -58,17 +59,18 @@ class SubscriberDispatcher(MessageDispatcher):
         self.__topic = topic
         self.__handler = handler
 
-    def dispatch(self, message):
-        content = simplejson.loads(message.body)
+    def dispatch(self, transport_message):
+        content = simplejson.loads(transport_message.body)
 
-        set_current_message(message)
+        set_transport_message(transport_message)
 
         try:
             self.__handler.handle(content)
         except:
             LOGGER.exception(
-                "Error processing the message '%s' from the topic '%s'." % (message.message_id, self.__topic))
+                "Error processing the message '%s' from the topic '%s'." %
+                (transport_message.message_id, self.__topic))
 
-        message.delete()
+        transport_message.delete()
 
-        set_current_message(None)
+        set_transport_message(None)

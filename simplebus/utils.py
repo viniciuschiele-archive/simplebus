@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import copy
-import inspect
 import sys
 
 
@@ -42,15 +41,6 @@ def import_string(import_name):
         return getattr(module, obj_name)
     except AttributeError as e:
         raise ImportError(e)
-
-
-def has_self(func):
-    args = inspect.getargspec(func)
-
-    if len(args) == 0:
-        return False
-
-    return args[0] == 'self'
 
 
 class EventHandler(object):
@@ -104,8 +94,8 @@ class EventHandler(object):
 
 
 class ImmutableDict(dict):
-    def _blocked_attribute(obj):
-        raise AttributeError("A frozendict cannot be modified.")
+    def _blocked_attribute(self, obj):
+        raise AttributeError("A ImmutableDict cannot be modified.")
     _blocked_attribute = property(_blocked_attribute)
 
     __delitem__ = __setitem__ = clear = _blocked_attribute
@@ -127,16 +117,16 @@ class ImmutableDict(dict):
                             if isinstance(elm, dict):
                                 v_.append(ImmutableDict(elm))
                             else:
-                                v_.append( elm )
+                                v_.append(elm)
                         arg[k] = tuple(v_)
-                args_.append( arg )
+                args_.append(arg)
             else:
-                args_.append( arg )
+                args_.append(arg)
 
         dict.__init__(new, *args_, **kw)
         return new
 
-    def __init__(self, *args, **kw):
+    def __init__(self, *args, **kwargs):
         pass
 
     def __hash__(self):

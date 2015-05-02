@@ -16,7 +16,7 @@ import datetime
 import uuid
 
 from simplebus import Config
-from simplebus import current_message
+from simplebus import transport_message
 from simplebus import MessageHandler
 from simplebus import pull
 from simplebus import subscribe
@@ -120,7 +120,7 @@ class TestPuller(TestCase):
 
         def handle(message):
             global started_at
-            if current_message.retry_count == 0:
+            if transport_message.retry_count == 0:
                 started_at = datetime.datetime.now()
                 raise RuntimeError('error')
             elapsed = datetime.datetime.now() - started_at

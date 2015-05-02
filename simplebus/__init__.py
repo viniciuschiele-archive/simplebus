@@ -19,4 +19,4 @@ from simplebus.decorators import pull
 from simplebus.decorators import subscribe
 from simplebus.handlers import MessageHandler
 from simplebus.state import current_bus
-from simplebus.state import current_message
+from simplebus.state import transport_message
