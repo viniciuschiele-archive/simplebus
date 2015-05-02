@@ -63,7 +63,7 @@ class Transport(base.Transport):
         if channel:
             channel.close()
 
-    def push(self, queue, message):
+    def push(self, queue, message, options):
         self.__send_message('', queue, message)
 
     def pull(self, id, queue, callback, options):
@@ -99,10 +99,10 @@ class Transport(base.Transport):
 
         self.__cancellations[id] = channel
 
-    def publish(self, topic, message):
+    def publish(self, topic, message, options):
         self.__send_message(topic, '', message)
 
-    def subscribe(self, id, topic, callback):
+    def subscribe(self, id, topic, callback, options):
         def on_message(body, ch, method, properties):
             message = self.__to_message(body, ch, method, properties, None, None)
             callback(message)
@@ -178,6 +178,7 @@ class Transport(base.Transport):
 
     def __send_message(self, exchange, routing_key, message):
         properties = {
+            'app_id': message.app_id,
             'message_id': message.message_id,
             'delivery_mode': 2
         }
@@ -212,6 +213,10 @@ class TransportMessage(base.TransportMessage):
         self.__channel = channel
         self.__dead_letter_queue = dead_letter_queue
         self.__retry_queue = retry_queue
+
+        app_id = properties.get('app_id')
+        if app_id:
+            self.app_id = bytes.decode(properties.get('app_id'))
 
         message_id = properties.get('message_id')
         if message_id:

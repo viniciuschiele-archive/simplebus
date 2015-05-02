@@ -46,7 +46,7 @@ class Transport(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def push(self, queue, message):
+    def push(self, queue, message, options):
         pass
 
     @abstractmethod
@@ -54,11 +54,11 @@ class Transport(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def publish(self, topic, message):
+    def publish(self, topic, message, options):
         pass
 
     @abstractmethod
-    def subscribe(self, id, topic, callback):
+    def subscribe(self, id, topic, callback, options):
         pass
 
     @abstractmethod
@@ -67,11 +67,20 @@ class Transport(metaclass=ABCMeta):
 
 
 class TransportMessage(object):
-    def __init__(self, message_id=None, body=None, expiration=None):
+    def __init__(self, app_id=None, message_id=None, body=None, expiration=None):
+        self._app_id = app_id
         self._message_id = message_id
         self._body = body
         self._expiration = expiration
         self._retry_count = 0
+
+    @property
+    def app_id(self):
+        return self._app_id
+
+    @app_id.setter
+    def app_id(self, value):
+        self._app_id = value
 
     @property
     def message_id(self):
@@ -138,19 +147,19 @@ class RecoveryAwareTransport(Transport):
         if cancellation:
             self.__transport.cancel(id)
 
-    def push(self, queue, message):
-        self.__transport.push(queue, message)
+    def push(self, queue, message, options):
+        self.__transport.push(queue, message, options)
 
     def pull(self, id, queue, callback, options):
-        self.__cancellations[id] = (queue, callback, options)
+        self.__cancellations[id] = dict(id=id, queue=queue, callback=callback, options=options)
         self.__transport.pull(id, queue, callback, options)
 
-    def publish(self, topic, message):
-        self.__transport.publish(topic, message)
+    def publish(self, topic, message, options):
+        self.__transport.publish(topic, message, options)
 
-    def subscribe(self, id, topic, callback):
-        self.__subscriptions[id] = (topic, callback)
-        self.__transport.subscribe(id, topic, callback)
+    def subscribe(self, id, topic, callback, options):
+        self.__subscriptions[id] = dict(id=id, topic=topic, callback=callback, options=options)
+        self.__transport.subscribe(id, topic, callback, options)
 
     def unsubscribe(self, id):
         subscriber = self.__subscriptions.pop(id)
@@ -188,11 +197,11 @@ class RecoveryAwareTransport(Transport):
         thread.start()
 
     def __revive_cancellations(self):
-        for cancellation in self.__cancellations.items():
-            id = cancellation[0]
-            queue = cancellation[1][0]
-            callback = cancellation[1][1]
-            options = cancellation[1][2]
+        for cancellation in self.__cancellations.values():
+            id = cancellation.get('id')
+            queue = cancellation.get('queue')
+            callback = cancellation.get('callback')
+            options = cancellation.get('options')
 
             try:
                 self.pull(id, queue, callback, options)
@@ -200,12 +209,13 @@ class RecoveryAwareTransport(Transport):
                 LOGGER.critical('Fail pulling the queue %s.' % queue, exc_info=True)
 
     def __revive_subscriptions(self):
-        for subscription in self.__subscriptions.items():
-            id = subscription[0]
-            topic = subscription[1][0]
-            callback = subscription[1][1]
+        for subscription in self.__subscriptions.values():
+            id = subscription.get('id')
+            topic = subscription.get('topic')
+            callback = subscription.get('callback')
+            options = subscription.get('options')
 
             try:
-                self.subscribe(id, topic, callback)
+                self.subscribe(id, topic, callback, options)
             except:
                 LOGGER.critical('Fail subscribing the topic %s.' % topic, exc_info=True)

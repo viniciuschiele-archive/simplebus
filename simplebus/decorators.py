@@ -22,8 +22,8 @@ def pull(queue, **options):
     return decorator
 
 
-def subscribe(topic, endpoint=None):
+def subscribe(topic, **options):
     def decorator(cls_or_func):
-        current_bus.subscribe(topic, cls_or_func, endpoint)
+        current_bus.subscribe(topic, cls_or_func, **options)
         return cls_or_func
     return decorator

@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -29,7 +29,8 @@ from simplebus.transports.base import TransportMessage
 
 
 class Bus(object):
-    def __init__(self):
+    def __init__(self, app_id=None):
+        self.__app_id = app_id
         self.__cancellations = []
         self.__queue_options = {}
         self.__started = False
@@ -73,9 +74,12 @@ class Bus(object):
 
         transport = self.__get_transport(options.get('endpoint'))
 
-        msg = TransportMessage(self.__create_message_id(), simplejson.dumps(message), options.get('expiration'))
+        transport_message = TransportMessage(self.__app_id,
+                                             self.__create_message_id(),
+                                             simplejson.dumps(message),
+                                             options.get('expiration'))
 
-        transport.push(queue, msg, **options)
+        transport.push(queue, transport_message, options)
 
     def pull(self, queue, callback, **options):
         self.__ensure_started()
@@ -88,23 +92,26 @@ class Bus(object):
         transport.pull(id, queue, dispatcher, options)
         return Cancellation(id, transport)
 
-    def publish(self, topic, message, endpoint=None):
+    def publish(self, topic, message, **options):
         self.__ensure_started()
 
-        transport = self.__get_transport(endpoint)
+        transport = self.__get_transport(options.get('endpoint'))
 
-        msg = TransportMessage(self.__create_message_id(), simplejson.dumps(message))
+        transport_message = TransportMessage(self.__app_id,
+                                             self.__create_message_id(),
+                                             simplejson.dumps(message),
+                                             options.get('expiration'))
 
-        transport.publish(topic, msg)
+        transport.publish(topic, transport_message, options)
 
-    def subscribe(self, topic, callback, endpoint=None):
+    def subscribe(self, topic, callback, **options):
         self.__ensure_started()
 
         id = str(uuid.uuid4())
         handler = self.__get_handler(callback)
-        transport = self.__get_transport(endpoint)
         dispatcher = SubscriberDispatcher(topic, handler)
-        transport.subscribe(id, topic, dispatcher)
+        transport = self.__get_transport(options.get('endpoint'))
+        transport.subscribe(id, topic, dispatcher, options)
         return Subscription(id, transport)
 
     @staticmethod

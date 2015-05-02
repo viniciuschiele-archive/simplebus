@@ -16,7 +16,7 @@ from simplebus import Bus
 
 
 def create_bus():
-    bus = Bus()
+    bus = Bus('unittests')
     bus.config.from_object(BusConfig())
     return bus
 
