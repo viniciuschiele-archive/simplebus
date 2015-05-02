@@ -1,3 +1,2 @@
-amqp-storm>=1.1.8
 simplejson>=3.6.5
 pylint>=1.4.3

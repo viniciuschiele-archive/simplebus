@@ -33,6 +33,7 @@ class Bus(object):
         self.__app_id = app_id
         self.__cancellations = []
         self.__queue_options = {}
+        self.__topic_options = {}
         self.__started = False
         self.__transports = {}
         self.config = Config()
@@ -75,7 +76,7 @@ class Bus(object):
         transport = self.__get_transport(options.get('endpoint'))
 
         transport_message = TransportMessage(self.__app_id,
-                                             self.__create_message_id(),
+                                             self.__create_random_id(),
                                              simplejson.dumps(message),
                                              options.get('expiration'))
 
@@ -84,10 +85,10 @@ class Bus(object):
     def pull(self, queue, callback, **options):
         self.__ensure_started()
 
-        id = str(uuid.uuid4())
+        id = self.__create_random_id()
         handler = self.__get_handler(callback)
-        options = self.__get_queue_options(queue, options)
         dispatcher = PullerDispatcher(queue, handler)
+        options = self.__get_queue_options(queue, options)
         transport = self.__get_transport(options.get('endpoint'))
         transport.pull(id, queue, dispatcher, options)
         return Cancellation(id, transport)
@@ -98,7 +99,7 @@ class Bus(object):
         transport = self.__get_transport(options.get('endpoint'))
 
         transport_message = TransportMessage(self.__app_id,
-                                             self.__create_message_id(),
+                                             self.__create_random_id(),
                                              simplejson.dumps(message),
                                              options.get('expiration'))
 
@@ -107,15 +108,16 @@ class Bus(object):
     def subscribe(self, topic, callback, **options):
         self.__ensure_started()
 
-        id = str(uuid.uuid4())
+        id = self.__create_random_id()
         handler = self.__get_handler(callback)
         dispatcher = SubscriberDispatcher(topic, handler)
+        options = self.__get_topic_options(topic, options)
         transport = self.__get_transport(options.get('endpoint'))
         transport.subscribe(id, topic, dispatcher, options)
         return Subscription(id, transport)
 
     @staticmethod
-    def __create_message_id():
+    def __create_random_id():
         return str(uuid.uuid4()).replace('-', '')
 
     def __ensure_started(self):
@@ -158,6 +160,33 @@ class Bus(object):
                 queue_options[k] = v
 
         return queue_options
+
+    def __get_topic_options(self, topic, options):
+        topic_options = self.__topic_options.get(topic)
+
+        if not topic_options:
+            topic_options = Config.DEFAULT_TOPICS.get('*').copy()
+            config_options = self.config.topics.get('*')
+
+            if config_options:
+                for k, v in config_options.items():
+                    topic_options[k] = v
+
+            config_options = self.config.topics.get(topic)
+
+            if config_options:
+                for k, v in config_options.items():
+                    topic_options[k] = v
+
+            self.__topic_options[topic] = topic_options
+
+        if options:
+            queue_options = topic_options.copy()
+
+            for k, v in options.items():
+                queue_options[k] = v
+
+        return topic_options
 
     def __get_transport(self, endpoint):
         if endpoint is None:

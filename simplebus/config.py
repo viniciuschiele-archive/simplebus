@@ -31,6 +31,15 @@ class Config(object):
             'expiration': None,
             'max_retry_count': 3,
             'retry_delay': 1000,
+            'prefetch_count': 10,
+            'endpoint': None
+        }
+    })
+
+    DEFAULT_TOPICS = ImmutableDict({
+        '*': {
+            'expiration': None,
+            'prefetch_count': 10,
             'endpoint': None
         }
     })
@@ -39,6 +48,7 @@ class Config(object):
         self.__frozen = False
         self.endpoints = self.DEFAULT_ENDPOINTS.copy()
         self.queues = self.DEFAULT_QUEUES.copy()
+        self.topics = self.DEFAULT_TOPICS.copy()
 
     def from_object(self, obj):
         """Load values from an object."""
@@ -51,6 +61,9 @@ class Config(object):
 
         if hasattr(obj, 'SIMPLEBUS_QUEUES'):
             self.queues = getattr(obj, 'SIMPLEBUS_QUEUES')
+
+        if hasattr(obj, 'SIMPLEBUS_TOPICS'):
+            self.topics = getattr(obj, 'SIMPLEBUS_TOPICS')
 
     def frozen(self):
         if self.__frozen:

@@ -67,10 +67,10 @@ class Transport(base.Transport):
         self.__send_message('', queue, message)
 
     def pull(self, id, queue, callback, options):
-        dead_letter_queue = queue + '.error'
+        dead_letter_queue = None
         dead_letter_enabled = options.get('dead_letter_enabled')
 
-        retry_queue = queue + '.retry'
+        retry_queue = None
         max_retry_count = options.get('max_retry_count')
         retry_delay = options.get('retry_delay')
 
@@ -82,15 +82,17 @@ class Transport(base.Transport):
             else:
                 callback(message)
 
-        if max_retry_count and retry_delay > 0:
-            self.__create_retry_queue(queue, retry_queue, retry_delay)
-
         if dead_letter_enabled:
+            dead_letter_queue = queue + '.error'
             self.__create_dead_letter_queue(dead_letter_queue)
+
+        if max_retry_count > 0 and retry_delay > 0:
+            retry_queue = queue + '.retry'
+            self.__create_retry_queue(queue, retry_queue, retry_delay)
 
         channel = self.__get_channel()
         channel.queue.declare(queue, durable=True)
-        channel.basic.qos(1)
+        channel.basic.qos(options.get('prefetch_count'))
         channel.basic.consume(on_message, queue, id)
 
         thread = Thread(target=self.__start_receiving, args=(channel,))
@@ -107,13 +109,13 @@ class Transport(base.Transport):
             message = self.__to_message(body, ch, method, properties, None, None)
             callback(message)
 
-        queue_name = topic + '-' + id
+        queue_name = topic + ':' + id
 
         channel = self.__get_channel()
         channel.exchange.declare(topic, 'topic', durable=True)
         channel.queue.declare(queue_name, exclusive=True, auto_delete=True)
         channel.queue.bind(queue_name, topic)
-        channel.basic.qos(1)
+        channel.basic.qos(options.get('prefetch_count'))
         channel.basic.consume(on_message, queue_name, id)
 
         thread = Thread(target=self.__start_receiving, args=(channel,))
@@ -241,6 +243,7 @@ class TransportMessage(base.TransportMessage):
     def dead_letter(self, reason):
         if self.__channel:
             self.__set_header_retry_count(0)
+            self.__set_header_death_reason(reason)
 
             self.__channel.basic.ack(self.__method.get('delivery_tag'))
 
@@ -271,6 +274,10 @@ class TransportMessage(base.TransportMessage):
                 routing_key,
                 exchange,
                 self.__properties)
+
+    def __set_header_death_reason(self, reason):
+        headers = self.__properties.get('headers')
+        headers[bytes('x-death-reason', 'utf-8')] = reason
 
     def __set_header_retry_count(self, retry_count):
         headers = self.__properties.get('headers')

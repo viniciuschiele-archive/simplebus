@@ -51,7 +51,7 @@ class TestPuller(TestCase):
     def tearDown(self):
         self.bus.stop()
 
-    def test_consumer_as_class(self):
+    def test_pull_as_class(self):
         event = Event()
 
         class Handler1(MessageHandler):
@@ -146,7 +146,7 @@ class TestSubscriber(TestCase):
     def tearDown(self):
         self.bus.stop()
 
-    def test_subscriber_as_class(self):
+    def test_subscribe_as_class(self):
         event = Event()
 
         class Handler1(MessageHandler):
@@ -159,7 +159,7 @@ class TestSubscriber(TestCase):
 
         event.wait()
 
-    def test_subscriber_as_decorator(self):
+    def test_subscribe_as_decorator(self):
         event = Event()
 
         @subscribe(self.topic)
@@ -171,7 +171,7 @@ class TestSubscriber(TestCase):
 
         event.wait()
 
-    def test_subscriber_as_function(self):
+    def test_subscribe_as_function(self):
         event = Event()
 
         def handle(message):
