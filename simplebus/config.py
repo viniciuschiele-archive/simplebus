@@ -73,3 +73,6 @@ class Config(object):
         self.queues = ImmutableDict(self.queues)
 
         self.__frozen = True
+
+    def unfrozen(self):
+        self.__frozen = False

@@ -68,6 +68,8 @@ class Bus(object):
             transport.close()
         self.__transports.clear()
 
+        self.config.unfrozen()
+
         set_current_bus(None)
 
     def push(self, queue, message, **options):
