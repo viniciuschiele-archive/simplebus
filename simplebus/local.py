@@ -24,7 +24,7 @@ from __future__ import absolute_import
 
 import importlib
 
-__all__ = ['Proxy', 'PromiseProxy', 'try_import', 'maybe_evaluate']
+__all__ = ['Proxy']
 
 __module__ = __name__  # used by Proxy class body
 
@@ -47,15 +47,6 @@ def _default_cls_attr(name, type_, cls_value):
     return type(name, (type_, ), {
         '__new__': __new__, '__get__': __get__,
     })
-
-
-def try_import(module, default=None):
-    """Try to import and return module, or return
-    None if the module does not exist."""
-    try:
-        return importlib.import_module(module)
-    except ImportError:
-        return default
 
 
 class Proxy(object):
@@ -202,82 +193,3 @@ class Proxy(object):
     __enter__ = lambda x: x._get_current_object().__enter__()
     __exit__ = lambda x, *a, **kw: x._get_current_object().__exit__(*a, **kw)
     __reduce__ = lambda x: x._get_current_object().__reduce__()
-
-
-class PromiseProxy(Proxy):
-    """This is a proxy to an object that has not yet been evaulated.
-
-    :class:`Proxy` will evaluate the object each time, while the
-    promise will only evaluate it once.
-
-    """
-
-    __slots__ = ('__pending__', )
-
-    def _get_current_object(self):
-        try:
-            return object.__getattribute__(self, '__thing')
-        except AttributeError:
-            return self.__evaluate__()
-
-    def __then__(self, fun, *args, **kwargs):
-        if self.__evaluated__():
-            return fun(*args, **kwargs)
-        from collections import deque
-        try:
-            pending = object.__getattribute__(self, '__pending__')
-        except AttributeError:
-            pending = None
-        if pending is None:
-            pending = deque()
-            object.__setattr__(self, '__pending__', pending)
-        pending.append((fun, args, kwargs))
-
-    def __evaluated__(self):
-        try:
-            object.__getattribute__(self, '__thing')
-        except AttributeError:
-            return False
-        return True
-
-    def __maybe_evaluate__(self):
-        return self._get_current_object()
-
-    def __evaluate__(self,
-                     _clean=('_Proxy__local',
-                             '_Proxy__args',
-                             '_Proxy__kwargs')):
-        try:
-            thing = Proxy._get_current_object(self)
-        except:
-            raise
-        else:
-            object.__setattr__(self, '__thing', thing)
-            for attr in _clean:
-                try:
-                    object.__delattr__(self, attr)
-                except AttributeError:  # pragma: no cover
-                    # May mask errors so ignore
-                    pass
-            try:
-                pending = object.__getattribute__(self, '__pending__')
-            except AttributeError:
-                pass
-            else:
-                try:
-                    while pending:
-                        fun, args, kwargs = pending.popleft()
-                        fun(*args, **kwargs)
-                finally:
-                    try:
-                        object.__delattr__(self, '__pending__')
-                    except AttributeError:
-                        pass
-            return thing
-
-
-def maybe_evaluate(obj):
-    try:
-        return obj.__maybe_evaluate__()
-    except AttributeError:
-        return obj

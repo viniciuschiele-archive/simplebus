@@ -20,7 +20,6 @@ def import_string(import_name):
     # force the import name to automatically convert to strings
     # __import__ is not able to handle unicode strings in the fromlist
     # if the module is a package
-    import_name = str(import_name).replace(':', '.')
     try:
         __import__(import_name)
     except ImportError:
