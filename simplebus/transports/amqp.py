@@ -20,6 +20,7 @@ except ImportError:
 import logging
 
 from simplebus.transports import base
+from simplebus.utils import EventHandler
 from threading import Lock
 from threading import Thread
 
@@ -32,8 +33,6 @@ class Transport(base.Transport):
         if amqpstorm is None:
             raise ImportError('Missing amqp-storm library (pip install amqp-storm)')
 
-        super().__init__()
-
         self.__connection = None
         self.__connection_lock = Lock()
         self.__closed_lock = Lock()
@@ -41,6 +40,7 @@ class Transport(base.Transport):
         self.__url = url
         self.__cancellations = {}
         self.__subscriptions = {}
+        self.closed = EventHandler()
 
     @property
     def is_open(self):

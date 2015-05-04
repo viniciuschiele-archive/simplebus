@@ -20,13 +20,11 @@ from abc import abstractmethod
 from simplebus.utils import EventHandler
 from threading import Thread
 
-
 LOGGER = logging.getLogger(__name__)
 
 
 class Transport(metaclass=ABCMeta):
-    def __init__(self):
-        self.closed = EventHandler()
+    closed = None
 
     @property
     @abstractmethod
@@ -122,14 +120,13 @@ class TransportMessage(object):
 
 class RecoveryAwareTransport(Transport):
     def __init__(self, transport, recovery_delay):
-        super().__init__()
-
         self.__is_open = False
         self.__cancellations = {}
         self.__subscriptions = {}
         self.__recovery_delay = recovery_delay
         self.__transport = transport
         self.__transport.closed += self.__on_closed
+        self.closed = EventHandler()
 
     @property
     def is_open(self):
@@ -185,13 +182,6 @@ class RecoveryAwareTransport(Transport):
                 time.sleep(self.__recovery_delay)
                 count += 1
 
-    def __start_recovery(self):
-        LOGGER.critical('Connection to the broker is down.', exc_info=True)
-
-        thread = Thread(target=self.__recover)
-        thread.daemon = True
-        thread.start()
-
     def __recover_cancellations(self):
         for cancellation in self.__cancellations.values():
             id = cancellation.get('id')
@@ -215,3 +205,10 @@ class RecoveryAwareTransport(Transport):
                 self.subscribe(id, topic, callback, options)
             except:
                 LOGGER.critical('Fail subscribing the topic %s.' % topic, exc_info=True)
+
+    def __start_recovery(self):
+        LOGGER.critical('Connection to the broker is down.', exc_info=True)
+
+        thread = Thread(target=self.__recover)
+        thread.daemon = True
+        thread.start()
