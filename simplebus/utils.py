@@ -51,6 +51,7 @@ def import_string(import_name):
 
 def merge_dict(dict1, dict2):
     """Merge two dicts into the first one."""
+
     if not dict2:
         return
 
@@ -111,49 +112,3 @@ class EventHandler(object):
         """Removes a callback from the EventHandler."""
         self.callbacks.remove(callback)
 
-
-class ImmutableDict(dict):
-    def _blocked_attribute(self, obj):
-        raise AttributeError("A ImmutableDict cannot be modified.")
-    _blocked_attribute = property(_blocked_attribute)
-
-    __delitem__ = __setitem__ = clear = _blocked_attribute
-    pop = popitem = setdefault = update = _blocked_attribute
-
-    def __new__(cls, *args, **kw):
-        new = dict.__new__(cls)
-
-        args_ = []
-        for arg in args:
-            if isinstance(arg, dict):
-                arg = copy.copy(arg)
-                for k, v in arg.items():
-                    if isinstance(v, dict):
-                        arg[k] = ImmutableDict(v)
-                    elif isinstance(v, list):
-                        v_ = list()
-                        for elm in v:
-                            if isinstance(elm, dict):
-                                v_.append(ImmutableDict(elm))
-                            else:
-                                v_.append(elm)
-                        arg[k] = tuple(v_)
-                args_.append(arg)
-            else:
-                args_.append(arg)
-
-        dict.__init__(new, *args_, **kw)
-        return new
-
-    def __init__(self, *args, **kwargs):
-        pass
-
-    def __hash__(self):
-        try:
-            return self._cached_hash
-        except AttributeError:
-            h = self._cached_hash = hash(tuple(sorted(self.items())))
-            return h
-
-    def __repr__(self):
-        return "ImmutableDict(%s)" % dict.__repr__(self)

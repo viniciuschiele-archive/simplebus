@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Message Handler is used to process a message received.
+"""
+
 from abc import ABCMeta
 from abc import abstractmethod
 

@@ -50,6 +50,8 @@ class PullerDispatcher(MessageDispatcher):
         self.__handler = handler
 
     def dispatch(self, transport_message):
+        """Dispatches the message."""
+
         content = simplejson.loads(transport_message.body)
 
         set_transport_message(transport_message)
@@ -78,6 +80,7 @@ class SubscriberDispatcher(MessageDispatcher):
 
     def dispatch(self, transport_message):
         """Dispatches the message."""
+
         content = simplejson.loads(transport_message.body)
 
         set_transport_message(transport_message)

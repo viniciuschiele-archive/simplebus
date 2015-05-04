@@ -38,38 +38,47 @@ class Transport(metaclass=ABCMeta):
     @property
     @abstractmethod
     def is_open(self):
+        """Gets the value that indicates whether the transport is open."""
         pass
 
     @abstractmethod
     def open(self):
+        """Opens the connection to the broker."""
         pass
 
     @abstractmethod
     def close(self):
+        """Closes the connection to the broker."""
         pass
 
     @abstractmethod
     def cancel(self, id):
+        """Cancels from receiving messages from a queue."""
         pass
 
     @abstractmethod
     def push(self, queue, message, options):
+        """Sends a message to the specified queue."""
         pass
 
     @abstractmethod
     def pull(self, id, queue, callback, options):
+        """Starts receiving messages from the specified queue."""
         pass
 
     @abstractmethod
     def publish(self, topic, message, options):
+        """Publishes a message to the specified topic."""
         pass
 
     @abstractmethod
     def subscribe(self, id, topic, callback, options):
+        """Subscribes to receive published messages to the specified topic."""
         pass
 
     @abstractmethod
     def unsubscribe(self, id):
+        """Unsubscribes from receiving published messages from a topic."""
         pass
 
 
@@ -85,47 +94,59 @@ class TransportMessage(object):
 
     @property
     def app_id(self):
+        """Gets the identifier of the application."""
         return self._app_id
 
     @app_id.setter
     def app_id(self, value):
+        """Sets the identifier of the application."""
         self._app_id = value
 
     @property
     def message_id(self):
+        """Gets the identifier of the message."""
         return self._message_id
 
     @message_id.setter
     def message_id(self, value):
+        """Sets the identifier of the message."""
         self._message_id = value
 
     @property
     def body(self):
+        """Gets the body as byte array."""
         return self._body
 
     @body.setter
     def body(self, value):
+        """Sets the body as byte array."""
         self._body = value
 
     @property
     def expiration(self):
+        """Gets the expiration in milliseconds."""
         return self._expiration
 
     @expiration.setter
     def expiration(self, value):
+        """Sets the expiration in milliseconds."""
         self._expiration = value
 
     @property
     def retry_count(self):
+        """Gets the number of retries."""
         return self._retry_count
 
     def delete(self):
+        """Deletes this message from the broker."""
         pass
 
     def dead_letter(self, reason):
+        """Deliveries this message to the specified dead letter."""
         pass
 
     def retry(self):
+        """Redelivery this message to the received again."""
         pass
 
 
@@ -145,46 +166,67 @@ class RecoveryAwareTransport(Transport):
 
     @property
     def is_open(self):
+        """Gets the value that indicates whether the transport is open."""
+
         return self.__is_open
 
-    def close(self):
-        self.__transport.close()
-        self.__is_open = False
-
     def open(self):
+        """Opens the connection to the broker."""
+
         self.__transport.open()
         self.__is_open = True
 
+    def close(self):
+        """Closes the connection to the broker."""
+
+        self.__transport.close()
+        self.__is_open = False
+
     def cancel(self, id):
+        """Cancels from receiving messages from a queue."""
+
         cancellation = self.__cancellations.pop(id)
         if cancellation:
             self.__transport.cancel(id)
 
     def push(self, queue, message, options):
+        """Sends a message to the specified queue."""
+
         self.__transport.push(queue, message, options)
 
     def pull(self, id, queue, callback, options):
+        """Starts receiving messages from the specified queue."""
+
         self.__cancellations[id] = dict(id=id, queue=queue, callback=callback, options=options)
         self.__transport.pull(id, queue, callback, options)
 
     def publish(self, topic, message, options):
+        """Publishes a message to the specified topic."""
+
         self.__transport.publish(topic, message, options)
 
     def subscribe(self, id, topic, callback, options):
+        """Subscribes to receive published messages to the specified topic."""
+
         self.__subscriptions[id] = dict(id=id, topic=topic, callback=callback, options=options)
         self.__transport.subscribe(id, topic, callback, options)
 
     def unsubscribe(self, id):
+        """Unsubscribes from receiving published messages from a topic."""
+
         subscriber = self.__subscriptions.pop(id)
         if subscriber:
             self.__transport.unsubscribe(id)
 
     def __on_closed(self):
-        self.closed()
+        """Called when the base transport is closed unexpected."""
 
+        self.closed()
         self.__start_recovery()
 
     def __recover(self):
+        """Tries to reconnect to the broker."""
+
         count = 1
         while self.is_open and not self.__transport.is_open:
             try:
@@ -198,6 +240,8 @@ class RecoveryAwareTransport(Transport):
                 count += 1
 
     def __recover_cancellations(self):
+        """Starts pulling again all queues that were being pulled."""
+
         for cancellation in self.__cancellations.values():
             id = cancellation.get('id')
             queue = cancellation.get('queue')
@@ -210,6 +254,8 @@ class RecoveryAwareTransport(Transport):
                 LOGGER.critical('Fail pulling the queue %s.' % queue, exc_info=True)
 
     def __recover_subscriptions(self):
+        """Subscribes again all topics that were subscribed."""
+
         for subscription in self.__subscriptions.values():
             id = subscription.get('id')
             topic = subscription.get('topic')
@@ -222,7 +268,9 @@ class RecoveryAwareTransport(Transport):
                 LOGGER.critical('Fail subscribing the topic %s.' % topic, exc_info=True)
 
     def __start_recovery(self):
-        LOGGER.critical('Connection to the broker is down.', exc_info=True)
+        """Starts recovery of transport."""
+
+        LOGGER.critical('Connection to the broker went down.', exc_info=True)
 
         thread = Thread(target=self.__recover)
         thread.daemon = True
