@@ -21,21 +21,27 @@ __local = threading.local()
 
 
 def get_current_bus():
+    """Gets the current bus."""
+
     return __bus
 
 
 def set_current_bus(bus):
+    """Sets the current bus."""
     global __bus
     __bus = bus
 
 
 def get_transport_message():
+    """Gets the transport message received."""
     if hasattr(__local, 'transport_message'):
         return __local.transport_message
     return None
 
 
 def set_transport_message(message):
+    """Sets the transport message received."""
+
     if message:
         __local.transport_message = message
     else:

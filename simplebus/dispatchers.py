@@ -12,6 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Dispatchers are used to process all messages received and
+dispatch them to the message handlers.
+"""
+
+
 import logging
 import simplejson
 
@@ -24,15 +30,21 @@ LOGGER = logging.getLogger(__name__)
 
 
 class MessageDispatcher(metaclass=ABCMeta):
+    """Base class for the dispatchers."""
     def __call__(self, *args, **kwargs):
         self.dispatch(*args)
 
     @abstractmethod
     def dispatch(self, message):
+        """Dispatches the message."""
         pass
 
 
 class PullerDispatcher(MessageDispatcher):
+    """
+    Dispatcher responsible for receiving messages from the queue and
+    send them to the message handler.
+    """
     def __init__(self, queue, handler):
         self.__queue = queue
         self.__handler = handler
@@ -55,11 +67,17 @@ class PullerDispatcher(MessageDispatcher):
 
 
 class SubscriberDispatcher(MessageDispatcher):
+    """
+    Dispatcher responsible for receiving messages from the topic and
+    send them to the message handler.
+    """
+
     def __init__(self, topic, handler):
         self.__topic = topic
         self.__handler = handler
 
     def dispatch(self, transport_message):
+        """Dispatches the message."""
         content = simplejson.loads(transport_message.body)
 
         set_transport_message(transport_message)

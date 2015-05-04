@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Base classes to implement a transport."""
+
+
 import logging
 import time
 
@@ -24,6 +27,12 @@ LOGGER = logging.getLogger(__name__)
 
 
 class Transport(metaclass=ABCMeta):
+    """
+    Main base class to a transport.
+    This class is used to establish a connection to the broker and
+    send/receive messages.
+    """
+
     closed = None
 
     @property
@@ -65,6 +74,8 @@ class Transport(metaclass=ABCMeta):
 
 
 class TransportMessage(object):
+    """An envelope used by SimpleBus to package messages for transmission."""
+
     def __init__(self, app_id=None, message_id=None, body=None, expiration=None):
         self._app_id = app_id
         self._message_id = message_id
@@ -119,6 +130,10 @@ class TransportMessage(object):
 
 
 class RecoveryAwareTransport(Transport):
+    """
+    Transport that provides auto reconnection for a base transport.
+    """
+
     def __init__(self, transport, recovery_delay):
         self.__is_open = False
         self.__cancellations = {}

@@ -12,10 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Implements the decorator methods."""
+
+
 from simplebus.state import current_bus
 
 
 def pull(queue, **options):
+    """Starts receiving messages from the specified queue."""
+
     def decorator(cls_or_func):
         current_bus.pull(queue, cls_or_func, **options)
         return cls_or_func
@@ -23,6 +28,8 @@ def pull(queue, **options):
 
 
 def subscribe(topic, **options):
+    """Subscribes to receive published messages to the specified topic."""
+
     def decorator(cls_or_func):
         current_bus.subscribe(topic, cls_or_func, **options)
         return cls_or_func

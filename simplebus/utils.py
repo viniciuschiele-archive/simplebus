@@ -18,6 +18,8 @@ import uuid
 
 
 def create_random_id():
+    """Creates a random uuid without hyphens."""
+
     return str(uuid.uuid4()).replace('-', '')
 
 
@@ -45,6 +47,19 @@ def import_string(import_name):
         return getattr(module, obj_name)
     except AttributeError as e:
         raise ImportError(e)
+
+
+def merge_dict(dict1, dict2):
+    """Merge two dicts into the first one."""
+    if not dict2:
+        return
+
+    for k, v in dict2.items():
+        if k in dict1:
+            if isinstance(v, dict):
+                merge_dict(dict1[k], v)
+                continue
+        dict1[k] = v
 
 
 class EventHandler(object):

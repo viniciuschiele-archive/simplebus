@@ -14,40 +14,47 @@
 
 """Implements the configuration related objects."""
 
-from simplebus.utils import ImmutableDict
+from simplebus.utils import merge_dict
 
 
 class Config(object):
     """
     SimpleBus configuration object. Default values are defined as
-    class attributes. Additional attributes may be added by extensions.
+    class attributes.
     """
 
-    DEFAULT_QUEUE = ImmutableDict({
-        'dead_letter_enabled': True,
-        'expiration': None,
-        'max_retry_count': 3,
-        'retry_delay': 1000,
-        'prefetch_count': 10,
-        'endpoint': None
-    })
-
-    DEFAULT_TOPIC = ImmutableDict({
-        'expiration': None,
-        'prefetch_count': 10,
-        'endpoint': None
-    })
-
+    #: Default endpoints.
     SIMPLEBUS_ENDPOINTS = {'default': 'amqp://guest:guest@localhost/'}
-    SIMPLEBUS_QUEUES = {}
-    SIMPLEBUS_TOPICS = {}
 
+    #: Default options for the queues.
+    #: '*' is the default configuration for all queues.
+    SIMPLEBUS_QUEUES = {
+        '*': {
+            'dead_letter_enabled': True,
+            'expiration': None,
+            'max_retry_count': 3,
+            'retry_delay': 1000,
+            'prefetch_count': 10,
+            'endpoint': None
+        }
+    }
+
+    #: Default options for the topics.
+    #: '*' is the default configuration for all topics.
+    SIMPLEBUS_TOPICS = {
+        '*': {
+            'expiration': None,
+            'prefetch_count': 10,
+            'endpoint': None
+        }
+    }
+
+    #: If enabled the bus will try to reconnect if the connection goes down.
     SIMPLEBUS_RECOVERY = True
-    SIMPLEBUS_RECOVERY_DELAY = 3  # 3 seconds
 
-    def __init__(self):
-        self.__queues_cached = {}
-        self.__topics_cached = {}
+    #: Number of seconds between retries of reconnecting.
+    #: Default is 3 seconds.
+    SIMPLEBUS_RECOVERY_DELAY = 3
 
     def from_object(self, obj):
         """Load values from an object."""
@@ -57,50 +64,12 @@ class Config(object):
                 value = getattr(obj, key)
                 self.__setattr(key, value)
 
-    def get_queue_options(self, queue, override_options):
-        return self.__get_options(
-            self.__queues_cached,
-            queue,
-            self.DEFAULT_QUEUE,
-            override_options,
-            self.SIMPLEBUS_QUEUES)
-
-    def get_topic_options(self, topic, override_options):
-        return self.__get_options(
-            self.__topics_cached,
-            topic,
-            self.DEFAULT_TOPIC,
-            override_options,
-            self.SIMPLEBUS_TOPICS)
-
-    @staticmethod
-    def __get_options(cache, key, default_options, override_options, pool_options):
-        options = cache.get(key)
-
-        if not options:
-            options = default_options.copy()
-            options_form_config = pool_options.get('*')
-
-            if options_form_config:
-                for k, v in options_form_config.items():
-                    options[k] = v
-
-            options_form_config = pool_options.get(key)
-
-            if options_form_config:
-                for k, v in options_form_config.items():
-                    options[k] = v
-
-            cache[key] = options
-
-        if override_options:
-            options = options.copy()
-
-            for k, v in override_options.items():
-                options[k] = v
-
-        return options
-
     def __setattr(self, key, value):
-        if hasattr(self.__class__, key):
+        """Sets the value for the specified key whether it exists."""
+
+        if key == 'SIMPLEBUS_QUEUES':
+            merge_dict(self.SIMPLEBUS_QUEUES, value)
+        elif key == 'SIMPLEBUS_TOPICS':
+            merge_dict(self.SIMPLEBUS_TOPICS, value)
+        elif hasattr(self.__class__, key):
             setattr(self, key, value)
