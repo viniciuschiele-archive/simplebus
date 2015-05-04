@@ -21,7 +21,7 @@ TRANSPORT_ALIASES = {
 }
 
 
-def create_transport(url):
+def create_transport(url, recovery_enabled, recovery_delay):
     if '://' not in url:
         raise ValueError('Invalid url.')
 
@@ -36,5 +36,10 @@ def create_transport(url):
 
     transport = transport_cls(url)
 
-    return RecoveryAwareTransport(transport)
+    if not recovery_enabled:
+        return transport
 
+    if recovery_delay < 1:
+        raise ValueError('recovery_delay must be greater than 0')
+
+    return RecoveryAwareTransport(transport, recovery_delay)

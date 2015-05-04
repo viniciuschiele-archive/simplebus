@@ -14,6 +14,11 @@
 
 import copy
 import sys
+import uuid
+
+
+def create_random_id():
+    return str(uuid.uuid4()).replace('-', '')
 
 
 def import_string(import_name):

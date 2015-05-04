@@ -23,56 +23,84 @@ class Config(object):
     class attributes. Additional attributes may be added by extensions.
     """
 
-    DEFAULT_ENDPOINTS = ImmutableDict({'default': 'amqp://guest:guest@localhost/'})
-
-    DEFAULT_QUEUES = ImmutableDict({
-        '*': {
-            'dead_letter_enabled': True,
-            'expiration': None,
-            'max_retry_count': 3,
-            'retry_delay': 1000,
-            'prefetch_count': 10,
-            'endpoint': None
-        }
+    DEFAULT_QUEUE = ImmutableDict({
+        'dead_letter_enabled': True,
+        'expiration': None,
+        'max_retry_count': 3,
+        'retry_delay': 1000,
+        'prefetch_count': 10,
+        'endpoint': None
     })
 
-    DEFAULT_TOPICS = ImmutableDict({
-        '*': {
-            'expiration': None,
-            'prefetch_count': 10,
-            'endpoint': None
-        }
+    DEFAULT_TOPIC = ImmutableDict({
+        'expiration': None,
+        'prefetch_count': 10,
+        'endpoint': None
     })
+
+    SIMPLEBUS_ENDPOINTS = {'default': 'amqp://guest:guest@localhost/'}
+    SIMPLEBUS_QUEUES = {}
+    SIMPLEBUS_TOPICS = {}
+
+    SIMPLEBUS_RECOVERY = True
+    SIMPLEBUS_RECOVERY_DELAY = 3  # 3 seconds
 
     def __init__(self):
-        self.__frozen = False
-        self.endpoints = self.DEFAULT_ENDPOINTS.copy()
-        self.queues = self.DEFAULT_QUEUES.copy()
-        self.topics = self.DEFAULT_TOPICS.copy()
+        self.__queues_cached = {}
+        self.__topics_cached = {}
 
     def from_object(self, obj):
         """Load values from an object."""
 
-        if self.__frozen:
-            return
+        for key in dir(obj):
+            if key.isupper() and key.startswith('SIMPLEBUS_'):
+                value = getattr(obj, key)
+                self.__setattr(key, value)
 
-        if hasattr(obj, 'SIMPLEBUS_ENDPOINTS'):
-            self.endpoints = getattr(obj, 'SIMPLEBUS_ENDPOINTS')
+    def get_queue_options(self, queue, override_options):
+        return self.__get_options(
+            self.__queues_cached,
+            queue,
+            self.DEFAULT_QUEUE,
+            override_options,
+            self.SIMPLEBUS_QUEUES)
 
-        if hasattr(obj, 'SIMPLEBUS_QUEUES'):
-            self.queues = getattr(obj, 'SIMPLEBUS_QUEUES')
+    def get_topic_options(self, topic, override_options):
+        return self.__get_options(
+            self.__topics_cached,
+            topic,
+            self.DEFAULT_TOPIC,
+            override_options,
+            self.SIMPLEBUS_TOPICS)
 
-        if hasattr(obj, 'SIMPLEBUS_TOPICS'):
-            self.topics = getattr(obj, 'SIMPLEBUS_TOPICS')
+    @staticmethod
+    def __get_options(cache, key, default_options, override_options, pool_options):
+        options = cache.get(key)
 
-    def frozen(self):
-        if self.__frozen:
-            return
+        if not options:
+            options = default_options.copy()
+            options_form_config = pool_options.get('*')
 
-        self.endpoints = ImmutableDict(self.endpoints)
-        self.queues = ImmutableDict(self.queues)
+            if options_form_config:
+                for k, v in options_form_config.items():
+                    options[k] = v
 
-        self.__frozen = True
+            options_form_config = pool_options.get(key)
 
-    def unfrozen(self):
-        self.__frozen = False
+            if options_form_config:
+                for k, v in options_form_config.items():
+                    options[k] = v
+
+            cache[key] = options
+
+        if override_options:
+            options = options.copy()
+
+            for k, v in override_options.items():
+                options[k] = v
+
+        return options
+
+    def __setattr(self, key, value):
+        if hasattr(self.__class__, key):
+            setattr(self, key, value)

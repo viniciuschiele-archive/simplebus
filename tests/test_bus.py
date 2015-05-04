@@ -28,12 +28,12 @@ from unittest import TestCase
 class TestConfig(TestCase):
     def test_default(self):
         config = Config()
-        self.assertEqual('amqp://guest:guest@localhost/', config.endpoints.get('default'))
+        self.assertEqual('amqp://guest:guest@localhost/', config.SIMPLEBUS_ENDPOINTS.get('default'))
 
     def test_from_object(self):
         config = Config()
         config.from_object(self.CustomConfig())
-        self.assertEqual('amqp://test:test@localhost/', config.endpoints.get('default'))
+        self.assertEqual('amqp://test:test@localhost/', config.SIMPLEBUS_ENDPOINTS.get('default'))
 
     class CustomConfig(object):
         SIMPLEBUS_ENDPOINTS = {

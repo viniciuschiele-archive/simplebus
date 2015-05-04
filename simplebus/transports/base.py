@@ -121,12 +121,13 @@ class TransportMessage(object):
 
 
 class RecoveryAwareTransport(Transport):
-    def __init__(self, transport):
+    def __init__(self, transport, recovery_delay):
         super().__init__()
 
         self.__is_open = False
         self.__cancellations = {}
         self.__subscriptions = {}
+        self.__recovery_delay = recovery_delay
         self.__transport = transport
         self.__transport.closed += self.__on_closed
 
@@ -169,34 +170,29 @@ class RecoveryAwareTransport(Transport):
     def __on_closed(self):
         self.closed()
 
-        self.__start_reconnecting()
+        self.__start_recovery()
 
-    def __reopen(self):
+    def __recover(self):
         count = 1
         while self.is_open and not self.__transport.is_open:
             try:
                 LOGGER.warn('Attempt %s to reconnect to the broker.' % count)
                 self.__transport.open()
-                self.__revive_cancellations()
-                self.__revive_subscriptions()
+                self.__recover_cancellations()
+                self.__recover_subscriptions()
                 LOGGER.info('Connection re-established to the broker.')
             except:
-                delay = count
-
-                if delay > 10:
-                    delay = 10
-
-                time.sleep(delay)
+                time.sleep(self.__recovery_delay)
                 count += 1
 
-    def __start_reconnecting(self):
+    def __start_recovery(self):
         LOGGER.critical('Connection to the broker is down.', exc_info=True)
 
-        thread = Thread(target=self.__reopen)
+        thread = Thread(target=self.__recover)
         thread.daemon = True
         thread.start()
 
-    def __revive_cancellations(self):
+    def __recover_cancellations(self):
         for cancellation in self.__cancellations.values():
             id = cancellation.get('id')
             queue = cancellation.get('queue')
@@ -208,7 +204,7 @@ class RecoveryAwareTransport(Transport):
             except:
                 LOGGER.critical('Fail pulling the queue %s.' % queue, exc_info=True)
 
-    def __revive_subscriptions(self):
+    def __recover_subscriptions(self):
         for subscription in self.__subscriptions.values():
             id = subscription.get('id')
             topic = subscription.get('topic')

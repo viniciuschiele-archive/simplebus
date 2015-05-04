@@ -14,7 +14,6 @@
 
 import inspect
 import simplejson
-import uuid
 
 from simplebus.config import Config
 from simplebus.cancellables import Cancellation
@@ -26,6 +25,7 @@ from simplebus.handlers import MessageHandler
 from simplebus.state import set_current_bus
 from simplebus.transports import create_transport
 from simplebus.transports.base import TransportMessage
+from simplebus.utils import create_random_id
 
 
 class Bus(object):
@@ -43,15 +43,16 @@ class Bus(object):
         return self.__started
 
     def start(self):
-        if len(self.config.endpoints) == 0:
+        if len(self.config.SIMPLEBUS_ENDPOINTS) == 0:
             raise RuntimeError('SimpleBus must have at least one endpoint')
 
-        self.config.frozen()
-
-        for endpoint in self.config.endpoints.items():
-            transport = create_transport(endpoint[1])
+        for key, endpoint in self.config.SIMPLEBUS_ENDPOINTS.items():
+            transport = create_transport(
+                endpoint,
+                self.config.SIMPLEBUS_RECOVERY,
+                self.config.SIMPLEBUS_RECOVERY_DELAY)
             transport.open()
-            self.__transports[endpoint[0]] = transport
+            self.__transports[key] = transport
 
         self.__started = True
 
@@ -68,29 +69,26 @@ class Bus(object):
             transport.close()
         self.__transports.clear()
 
-        self.config.unfrozen()
-
         set_current_bus(None)
 
     def push(self, queue, message, **options):
         self.__ensure_started()
 
+        options = self.config.get_queue_options(queue, options)
         transport = self.__get_transport(options.get('endpoint'))
-
         transport_message = TransportMessage(self.__app_id,
-                                             self.__create_random_id(),
+                                             create_random_id(),
                                              simplejson.dumps(message),
                                              options.get('expiration'))
-
         transport.push(queue, transport_message, options)
 
     def pull(self, queue, callback, **options):
         self.__ensure_started()
 
-        id = self.__create_random_id()
+        id = create_random_id()
         handler = self.__get_handler(callback)
         dispatcher = PullerDispatcher(queue, handler)
-        options = self.__get_queue_options(queue, options)
+        options = self.config.get_queue_options(queue, options)
         transport = self.__get_transport(options.get('endpoint'))
         transport.pull(id, queue, dispatcher, options)
         return Cancellation(id, transport)
@@ -98,29 +96,24 @@ class Bus(object):
     def publish(self, topic, message, **options):
         self.__ensure_started()
 
+        options = self.config.get_topic_options(topic, options)
         transport = self.__get_transport(options.get('endpoint'))
-
         transport_message = TransportMessage(self.__app_id,
-                                             self.__create_random_id(),
+                                             create_random_id(),
                                              simplejson.dumps(message),
                                              options.get('expiration'))
-
         transport.publish(topic, transport_message, options)
 
     def subscribe(self, topic, callback, **options):
         self.__ensure_started()
 
-        id = self.__create_random_id()
+        id = create_random_id()
         handler = self.__get_handler(callback)
         dispatcher = SubscriberDispatcher(topic, handler)
-        options = self.__get_topic_options(topic, options)
+        options = self.config.get_topic_options(topic, options)
         transport = self.__get_transport(options.get('endpoint'))
         transport.subscribe(id, topic, dispatcher, options)
         return Subscription(id, transport)
-
-    @staticmethod
-    def __create_random_id():
-        return str(uuid.uuid4()).replace('-', '')
 
     def __ensure_started(self):
         if not self.is_started:
@@ -135,60 +128,6 @@ class Bus(object):
             return CallbackHandler(callback)
 
         raise TypeError('Parameter handler must be an instance of MessageHandler or a function.')
-
-    def __get_queue_options(self, queue, options):
-        queue_options = self.__queue_options.get(queue)
-
-        if not queue_options:
-            queue_options = Config.DEFAULT_QUEUES.get('*').copy()
-            config_options = self.config.queues.get('*')
-
-            if config_options:
-                for k, v in config_options.items():
-                    queue_options[k] = v
-
-            config_options = self.config.queues.get(queue)
-
-            if config_options:
-                for k, v in config_options.items():
-                    queue_options[k] = v
-
-            self.__queue_options[queue] = queue_options
-
-        if options:
-            queue_options = queue_options.copy()
-
-            for k, v in options.items():
-                queue_options[k] = v
-
-        return queue_options
-
-    def __get_topic_options(self, topic, options):
-        topic_options = self.__topic_options.get(topic)
-
-        if not topic_options:
-            topic_options = Config.DEFAULT_TOPICS.get('*').copy()
-            config_options = self.config.topics.get('*')
-
-            if config_options:
-                for k, v in config_options.items():
-                    topic_options[k] = v
-
-            config_options = self.config.topics.get(topic)
-
-            if config_options:
-                for k, v in config_options.items():
-                    topic_options[k] = v
-
-            self.__topic_options[topic] = topic_options
-
-        if options:
-            queue_options = topic_options.copy()
-
-            for k, v in options.items():
-                queue_options[k] = v
-
-        return topic_options
 
     def __get_transport(self, endpoint):
         if endpoint is None:
