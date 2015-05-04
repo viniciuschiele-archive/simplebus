@@ -13,10 +13,10 @@ SimpleBus is still under heavy development so next changes might break compatibi
 Soon...
 
 ##Installation
-You can install SimpleBus via the Python Package Index (PyPI).
+You can install SimpleBus via Python Package Index (PyPI).  
 `$ pip install simplebus`
 
-To use AMQP transport you need to install [amqp-storm](https://github.com/eandersson/amqp-storm) library.
+To use AMQP transport you need to install the [amqp-storm](https://github.com/eandersson/amqp-storm) library.  
 `$ pip install amqp-storm`
 
 ##Feedback
