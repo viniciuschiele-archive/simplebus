@@ -185,6 +185,7 @@ class Transport(base.Transport):
         properties = {
             'app_id': message.app_id,
             'message_id': message.message_id,
+            'content_type': message.content_type,
             'delivery_mode': 2
         }
 
@@ -221,11 +222,15 @@ class TransportMessage(base.TransportMessage):
 
         app_id = properties.get('app_id')
         if app_id:
-            self.app_id = bytes.decode(properties.get('app_id'))
+            self.app_id = bytes.decode(app_id)
 
         message_id = properties.get('message_id')
         if message_id:
-            self.message_id = bytes.decode(properties.get('message_id'))
+            self.message_id = bytes.decode(message_id)
+
+        content_type = properties.get('content_type')
+        if content_type:
+            self.content_type = bytes.decode(content_type)
 
         headers = properties.get('headers')
         if not headers:

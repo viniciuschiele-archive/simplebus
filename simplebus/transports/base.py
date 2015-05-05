@@ -85,9 +85,10 @@ class Transport(metaclass=ABCMeta):
 class TransportMessage(object):
     """An envelope used by SimpleBus to package messages for transmission."""
 
-    def __init__(self, app_id=None, message_id=None, body=None, expiration=None):
+    def __init__(self, app_id=None, message_id=None, content_type=None, body=None, expiration=None):
         self._app_id = app_id
         self._message_id = message_id
+        self._content_type = content_type
         self._body = body
         self._expiration = expiration
         self._retry_count = 0
@@ -111,6 +112,16 @@ class TransportMessage(object):
     def message_id(self, value):
         """Sets the identifier of the message."""
         self._message_id = value
+
+    @property
+    def content_type(self):
+        """Gets the type of the content."""
+        return self._content_type
+
+    @content_type.setter
+    def content_type(self, value):
+        """Sets the type of the content."""
+        self._content_type = value
 
     @property
     def body(self):

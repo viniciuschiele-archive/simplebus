@@ -97,6 +97,18 @@ class TestPuller(TestCase):
         cancellation = self.bus.pull(self.queue, handle)
         cancellation.cancel()
 
+    def test_message_properties(self):
+        event = Event()
+
+        def handle(message):
+            self.assertEqual('application/json', transport_message.content_type)
+            event.set()
+
+        self.bus.pull(self.queue, handle)
+        self.bus.push(self.queue, 'hello')
+
+        event.wait()
+
     def test_max_retry_count(self):
         event = Event()
 

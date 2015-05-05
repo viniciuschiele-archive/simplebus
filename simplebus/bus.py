@@ -87,6 +87,7 @@ class Bus(object):
         transport = self.__get_transport(options.get('endpoint'))
         transport_message = TransportMessage(self.__app_id,
                                              create_random_id(),
+                                             'application/json',
                                              simplejson.dumps(message),
                                              options.get('expiration'))
         transport.push(queue, transport_message, options)
@@ -113,6 +114,7 @@ class Bus(object):
         transport = self.__get_transport(options.get('endpoint'))
         transport_message = TransportMessage(self.__app_id,
                                              create_random_id(),
+                                             'application/json',
                                              simplejson.dumps(message),
                                              options.get('expiration'))
         transport.publish(topic, transport_message, options)
