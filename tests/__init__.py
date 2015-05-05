@@ -22,6 +22,10 @@ def create_bus():
 
 
 class BusConfig(object):
+    SIMPLEBUS_ENDPOINTS = {
+        'default': 'amqp://guest:guest@localhost'
+    }
+
     SIMPLEBUS_QUEUES = {
         '*': {
             'dead_letter_enabled': False,

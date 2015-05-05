@@ -22,11 +22,12 @@ except ImportError:
 
 import logging
 
+from simplebus.pools import ResourcePool
 from simplebus.transports import base
 from simplebus.utils import EventHandler
 from threading import Lock
 from threading import Thread
-
+from urllib import parse
 
 LOGGER = logging.getLogger(__name__)
 
@@ -38,6 +39,8 @@ class Transport(base.Transport):
 
         self.__connection = None
         self.__connection_lock = Lock()
+        self.__channels = None
+        self.__channel_limit = self.__parse_channel_limit(url)
         self.__closed_lock = Lock()
         self.__closed_called = False
         self.__url = url
@@ -58,6 +61,9 @@ class Transport(base.Transport):
         if not self.is_open:
             return
 
+        self.__channels.close()
+        self.__channels = None
+
         self.__connection.close()
         self.__connection = None
 
@@ -67,16 +73,10 @@ class Transport(base.Transport):
             channel.close()
 
     def push(self, queue, message, options):
+        self.__ensure_connection()
         self.__send_message('', queue, message)
 
     def pull(self, id, queue, callback, options):
-        dead_letter_queue = None
-        dead_letter_enabled = options.get('dead_letter_enabled')
-
-        retry_queue = None
-        max_retry_count = options.get('max_retry_count')
-        retry_delay = options.get('retry_delay')
-
         def on_message(body, ch, method, properties):
             message = self.__to_message(body, ch, method, properties, dead_letter_queue, retry_queue)
 
@@ -84,6 +84,15 @@ class Transport(base.Transport):
                 message.dead_letter('Max retry exceeded.')
             else:
                 callback(message)
+
+        self.__ensure_connection()
+
+        dead_letter_queue = None
+        dead_letter_enabled = options.get('dead_letter_enabled')
+
+        retry_queue = None
+        max_retry_count = options.get('max_retry_count')
+        retry_delay = options.get('retry_delay')
 
         if dead_letter_enabled:
             dead_letter_queue = queue + '.error'
@@ -93,7 +102,7 @@ class Transport(base.Transport):
             retry_queue = queue + '.retry'
             self.__create_retry_queue(queue, retry_queue, retry_delay)
 
-        channel = self.__get_channel()
+        channel = self.__connection.channel()
         channel.queue.declare(queue, durable=True)
         channel.basic.qos(options.get('prefetch_count'))
         channel.basic.consume(on_message, queue, id)
@@ -105,6 +114,7 @@ class Transport(base.Transport):
         self.__cancellations[id] = channel
 
     def publish(self, topic, message, options):
+        self.__ensure_connection()
         self.__send_message(topic, '', message)
 
     def subscribe(self, id, topic, callback, options):
@@ -112,9 +122,11 @@ class Transport(base.Transport):
             message = self.__to_message(body, ch, method, properties, None, None)
             callback(message)
 
+        self.__ensure_connection()
+
         queue_name = topic + ':' + id
 
-        channel = self.__get_channel()
+        channel = self.__connection.channel()
         channel.exchange.declare(topic, 'topic', durable=True)
         channel.queue.declare(queue_name, exclusive=True, auto_delete=True)
         channel.queue.bind(queue_name, topic)
@@ -133,7 +145,7 @@ class Transport(base.Transport):
             channel.close()
 
     def __create_dead_letter_queue(self, dead_letter_queue):
-        with self.__get_channel() as channel:
+        with self.__connection.channel() as channel:
             channel.queue.declare(dead_letter_queue, durable=True)
 
     def __create_retry_queue(self, queue, retry_queue, retry_delay):
@@ -143,18 +155,11 @@ class Transport(base.Transport):
             'x-message-ttl': retry_delay}
 
         try:
-            with self.__get_channel() as channel:
+            with self.__connection.channel() as channel:
                 channel.queue.declare(retry_queue, durable=True, arguments=args)
         except amqpstorm.AMQPChannelError as e:
             if 'x-message-ttl' not in str(e):
                 raise
-
-    def __get_channel(self):
-        if not self.is_open:
-            raise RuntimeError('Transport is not opened.')
-
-        self.__ensure_connection()
-        return self.__connection.channel()
 
     def __ensure_connection(self):
         if self.is_open:
@@ -166,6 +171,7 @@ class Transport(base.Transport):
 
             self.__connection = amqpstorm.UriConnection(self.__url)
             self.__connection.open()
+            self.__channels = ChannelPool(self.__channel_limit, self.__connection)
             self.__closed_called = False
 
     def __on_exception(self, exc):
@@ -181,6 +187,18 @@ class Transport(base.Transport):
             self.__closed_called = True
             self.closed()
 
+    @staticmethod
+    def __parse_channel_limit(url):
+        uri = parse.urlparse(url)
+        params = parse.parse_qs(uri.query)
+
+        channel_limit = params.get('channel_limit')
+
+        if not channel_limit:
+            return None
+
+        return int(channel_limit[0])
+
     def __send_message(self, exchange, routing_key, message):
         properties = {
             'app_id': message.app_id,
@@ -195,9 +213,12 @@ class Transport(base.Transport):
         if message.retry_count > 0:
             properties['headers'] = {'x-retry-count': message.retry_count}
 
-        with self.__get_channel() as channel:
+        channel = self.__channels.acquire()
+        try:
             channel.confirm_deliveries()
             channel.basic.publish(message.body, routing_key, exchange, mandatory=True, properties=properties)
+        finally:
+            self.__channels.release(channel)
 
     def __start_receiving(self, channel):
         try:
@@ -290,3 +311,19 @@ class TransportMessage(base.TransportMessage):
     def __set_header_retry_count(self, retry_count):
         headers = self.__properties.get('headers')
         headers[bytes('x-retry-count', 'utf-8')] = retry_count
+
+
+class ChannelPool(ResourcePool):
+    """Provides a pool of channels."""
+
+    def __init__(self, max_size, connection):
+        super().__init__(max_size)
+        self.__connection = connection
+
+    def _create_resource(self):
+        """Creates a new channel."""
+        return self.__connection.channel()
+
+    def _close_resource(self, resource):
+        """Close the specified channel."""
+        resource.close()
