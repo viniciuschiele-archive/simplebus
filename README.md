@@ -5,8 +5,8 @@ SimpleBus is still under heavy development so next changes might break compatibi
 ##Features
 - Auto recovery in case of connection fall.
 - Multiple transports. (only amqp implemented so far)
-- Messages that fail all retires are send to an error queue (dead letter queue).
-- Retry logic for all messages received, it support delay between retries.
+- Dead Letter Queue, messages that fail all retires are send to an error queue.
+- Retry logic for all messages received, it supports delay between retries.
 - ... more coming
 
 ##Documentation
