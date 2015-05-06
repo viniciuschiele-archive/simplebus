@@ -23,7 +23,7 @@ def create_bus():
 
 class BusConfig(object):
     SIMPLEBUS_ENDPOINTS = {
-        'default': 'amqp://guest:guest@localhost'
+        'default': 'amqp://guest:guest@localhost?channel_limit=5'
     }
 
     SIMPLEBUS_QUEUES = {
