@@ -23,7 +23,6 @@ from simplebus import MessageHandler
 from simplebus import pull
 from simplebus import subscribe
 from tests import create_bus
-from threading import Event
 from unittest import TestCase
 
 
@@ -54,41 +53,32 @@ class TestPuller(TestCase):
         self.bus.stop()
 
     def test_pull_as_class(self):
-        event = Event()
-
         class Handler1(MessageHandler):
             def handle(self_, message):
                 self.assertEqual('hello', message)
-                event.set()
+                self.bus.loop.stop()
 
         self.bus.pull(self.queue, Handler1())
         self.bus.push(self.queue, 'hello')
-
-        event.wait()
+        self.bus.loop.start()
 
     def test_pull_as_decorator(self):
-        event = Event()
-
         @pull(self.queue)
         def handle(message):
             self.assertEqual('hello', message)
-            event.set()
+            self.bus.loop.stop()
 
         self.bus.push(self.queue, 'hello')
-
-        event.wait()
+        self.bus.loop.start()
 
     def test_pull_as_function(self):
-        event = Event()
-
         def handle(message):
             self.assertEqual('hello', message)
-            event.set()
+            self.bus.loop.stop()
 
         self.bus.pull(self.queue, handle)
         self.bus.push(self.queue, 'hello')
-
-        event.wait()
+        self.bus.loop.start()
 
     def test_cancel(self):
         def handle(message):
@@ -98,20 +88,15 @@ class TestPuller(TestCase):
         cancellation.cancel()
 
     def test_message_properties(self):
-        event = Event()
-
         def handle(message):
             self.assertEqual('application/json', transport_message.content_type)
-            event.set()
+            self.bus.loop.stop()
 
         self.bus.pull(self.queue, handle)
         self.bus.push(self.queue, 'hello')
+        self.bus.loop.start()
 
-        event.wait()
-
-    def test_max_retry_count(self):
-        event = Event()
-
+    def test_max_retries(self):
         key = str(uuid.uuid4())
 
         def handle(message):
@@ -119,17 +104,14 @@ class TestPuller(TestCase):
 
         def handle_error(message):
             self.assertEqual(key, message)
-            event.set()
+            self.bus.loop.stop()
 
         self.bus.pull(self.queue, handle, dead_letter_enabled=True)
         self.bus.pull(self.queue + '.error', handle_error, dead_letter_enabled=False)
         self.bus.push(self.queue, key)
-
-        event.wait()
+        self.bus.loop.start()
 
     def test_retry_delay(self):
-        event = Event()
-
         started_at = None
 
         def handle(message):
@@ -139,15 +121,15 @@ class TestPuller(TestCase):
                 raise RuntimeError('error')
             elapsed = datetime.datetime.now() - started_at
 
-            event.set()
+            try:
+                if elapsed.microseconds < 100 * 1000:
+                    self.fail('Message received too early.')
+            finally:
+                self.bus.loop.stop()
 
-            if elapsed.microseconds < 100 * 1000:
-                self.fail('Message received too early.')
-
-        self.bus.pull(self.queue, handle, max_retry_count=1, retry_delay=200)
+        self.bus.pull(self.queue, handle, max_retries=1, retry_delay=200)
         self.bus.push(self.queue, 'hello')
-
-        event.wait()
+        self.bus.loop.start()
 
 
 class TestSubscriber(TestCase):
@@ -161,41 +143,32 @@ class TestSubscriber(TestCase):
         self.bus.stop()
 
     def test_subscribe_as_class(self):
-        event = Event()
-
         class Handler1(MessageHandler):
             def handle(self_, message):
                 self.assertEqual('hello', message)
-                event.set()
+                self.bus.loop.stop()
 
         self.bus.subscribe(self.topic, Handler1())
         self.bus.publish(self.topic, 'hello')
-
-        event.wait()
+        self.bus.loop.start()
 
     def test_subscribe_as_decorator(self):
-        event = Event()
-
         @subscribe(self.topic)
         def handle(message):
             self.assertEqual('hello', message)
-            event.set()
+            self.bus.loop.stop()
 
         self.bus.publish(self.topic, 'hello')
-
-        event.wait()
+        self.bus.loop.start()
 
     def test_subscribe_as_function(self):
-        event = Event()
-
         def handle(message):
             self.assertEqual('hello', message)
-            event.set()
+            self.bus.loop.stop()
 
         self.bus.subscribe(self.topic, handle)
         self.bus.publish(self.topic, 'hello')
-
-        event.wait()
+        self.bus.loop.start()
 
     def test_unsubscribe(self):
         def handle(message):
