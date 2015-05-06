@@ -1,5 +1,4 @@
-Implement examples.
+Custom serializers.
 Concurrency for pull and subscribe methods.
 Retry logic for push and publish methods
-Custom serializers.
 Strategy for transport recovery logic.
