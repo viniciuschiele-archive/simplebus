@@ -74,13 +74,13 @@ class Transport(base.Transport):
 
     def push(self, queue, message, options):
         self.__ensure_connection()
-        self.__send_message('', queue, message)
+        self.__send_message('', queue, message, True)
 
     def pull(self, id, queue, callback, options):
         def on_message(body, ch, method, properties):
             message = self.__to_message(body, ch, method, properties, dead_letter_queue, retry_queue)
 
-            if message.retry_count > max_retry_count:
+            if message.retry_count > max_retries:
                 message.dead_letter('Max retry exceeded.')
             else:
                 callback(message)
@@ -91,14 +91,14 @@ class Transport(base.Transport):
         dead_letter_enabled = options.get('dead_letter_enabled')
 
         retry_queue = None
-        max_retry_count = options.get('max_retry_count')
+        max_retries = options.get('max_retries')
         retry_delay = options.get('retry_delay')
 
         if dead_letter_enabled:
             dead_letter_queue = queue + '.error'
             self.__create_dead_letter_queue(dead_letter_queue)
 
-        if max_retry_count > 0 and retry_delay > 0:
+        if max_retries > 0 and retry_delay > 0:
             retry_queue = queue + '.retry'
             self.__create_retry_queue(queue, retry_queue, retry_delay)
 
@@ -115,7 +115,7 @@ class Transport(base.Transport):
 
     def publish(self, topic, message, options):
         self.__ensure_connection()
-        self.__send_message(topic, '', message)
+        self.__send_message(topic, '', message, False)
 
     def subscribe(self, id, topic, callback, options):
         def on_message(body, ch, method, properties):
@@ -199,7 +199,7 @@ class Transport(base.Transport):
 
         return int(channel_limit[0])
 
-    def __send_message(self, exchange, routing_key, message):
+    def __send_message(self, exchange, routing_key, message, mandatory):
         properties = {
             'app_id': message.app_id,
             'message_id': message.message_id,
@@ -216,7 +216,7 @@ class Transport(base.Transport):
         channel = self.__channels.acquire()
         try:
             channel.confirm_deliveries()
-            channel.basic.publish(message.body, routing_key, exchange, mandatory=True, properties=properties)
+            channel.basic.publish(message.body, routing_key, exchange, mandatory=mandatory, properties=properties)
         finally:
             self.__channels.release(channel)
 

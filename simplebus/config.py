@@ -32,7 +32,7 @@ class Config(object):
         '*': {
             'dead_letter_enabled': True,
             'expiration': None,
-            'max_retry_count': 3,
+            'max_retries': 3,
             'retry_delay': 1000,
             'prefetch_count': 10,
             'endpoint': None
