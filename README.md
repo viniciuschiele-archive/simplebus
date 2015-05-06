@@ -21,3 +21,7 @@ To use AMQP transport you need to install the [amqp-storm](https://github.com/ea
 
 ##Feedback
 Please use the [Issues](https://github.com/viniciuschiele/simplebus/issues) for feature requests and troubleshooting usage.
+
+
+[![Bitdeli Badge](https://d2weczhvl823v0.cloudfront.net/viniciuschiele/simplebus/trend.png)](https://bitdeli.com/free "Bitdeli Badge")
+
