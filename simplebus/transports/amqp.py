@@ -327,3 +327,7 @@ class ChannelPool(ResourcePool):
     def _close_resource(self, resource):
         """Close the specified channel."""
         resource.close()
+
+    def _validate_resource(self, resource):
+        """Validates whether channel is open."""
+        return resource.is_open

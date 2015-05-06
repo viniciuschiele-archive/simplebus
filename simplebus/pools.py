@@ -30,7 +30,7 @@ class ResourcePool(metaclass=ABCMeta):
         self.__resources_out = set()
 
     def acquire(self):
-        """Acquire a resource."""
+        """Acquires a resource."""
 
         if self.__closed:
             raise RuntimeError('Acquire on closed pool')
@@ -38,8 +38,13 @@ class ResourcePool(metaclass=ABCMeta):
         if not self.limit:
             return self._create_resource()
 
+        resource = None
+
         try:
-            resource = self.__resources_in.get_nowait()
+            while True:
+                resource = self.__resources_in.get_nowait()
+                if self._validate_resource(resource):
+                    break
         except Empty:
             resource = None
 
@@ -55,7 +60,10 @@ class ResourcePool(metaclass=ABCMeta):
         """Release resource so it can be used by another thread."""
 
         if self.limit:
-            self.__resources_in.put_nowait(resource)
+            if self._validate_resource(resource):
+                self.__resources_in.put_nowait(resource)
+            else:
+                self._close_resource(resource)
             self.__resources_out.discard(resource)
         else:
             self._close_resource(resource)
@@ -93,4 +101,9 @@ class ResourcePool(metaclass=ABCMeta):
     @abstractmethod
     def _close_resource(self, resource):
         """Closes the specified resource."""
+        pass
+
+    @abstractmethod
+    def _validate_resource(self, resource):
+        """Validates whether resource is still valid to be used."""
         pass
