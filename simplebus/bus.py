@@ -29,6 +29,7 @@ from simplebus.state import set_current_bus
 from simplebus.transports import create_transport
 from simplebus.transports.base import TransportMessage
 from simplebus.utils import create_random_id
+from simplebus.utils import Loop
 
 
 class Bus(object):
@@ -42,12 +43,17 @@ class Bus(object):
         self.__transports = {}
         self.__queues_cached = {}
         self.__topics_cached = {}
+        self.__loop = Loop()
         self.config = Config()
 
     @property
     def is_started(self):
         """Gets the value whether the bus is started."""
         return self.__started
+
+    @property
+    def loop(self):
+        return self.__loop
 
     def start(self):
         """Starts the bus."""

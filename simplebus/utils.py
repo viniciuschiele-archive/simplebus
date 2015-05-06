@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import sys
+import threading
 import uuid
 
 
@@ -112,3 +112,16 @@ class EventHandler(object):
         """Removes a callback from the EventHandler."""
         self.callbacks.remove(callback)
 
+
+class Loop(object):
+    """A simple class that block the current thread."""
+    def __init__(self):
+        self.__event = threading.Event()
+
+    def start(self):
+        """Blocks the current thread."""
+        self.__event.wait()
+
+    def stop(self):
+        """Releases the blocked thread."""
+        self.__event.set()
