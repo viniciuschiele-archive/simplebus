@@ -1,4 +1,3 @@
-Pool of channels in the AMQP Transport.
 Implement examples.
 Concurrency for pull and subscribe methods.
 Retry logic for push and publish methods
