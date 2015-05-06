@@ -1,3 +1,4 @@
+Create custom exceptions instead of throwing the native exception.
 Custom serializers.
 Concurrency for pull and subscribe methods.
 Retry logic for push and publish methods
