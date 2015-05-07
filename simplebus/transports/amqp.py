@@ -78,7 +78,7 @@ class Transport(base.Transport):
 
     def pull(self, id, queue, callback, options):
         def on_message(body, ch, method, properties):
-            message = self.__to_message(body, ch, method, properties, dead_letter_queue, retry_queue)
+            message = self.__to_message(body, ch, method, properties, error_queue, retry_queue)
 
             if message.retry_count > max_retries:
                 message.error('Max retry exceeded.')
@@ -87,16 +87,16 @@ class Transport(base.Transport):
 
         self.__ensure_connection()
 
-        dead_letter_queue = None
-        dead_letter_enabled = options.get('dead_letter_enabled')
+        error_queue = None
+        error_queue_enabled = options.get('error_queue_enabled')
 
         retry_queue = None
         max_retries = options.get('max_retries')
         retry_delay = options.get('retry_delay')
 
-        if dead_letter_enabled:
-            dead_letter_queue = queue + '.error'
-            self.__create_dead_letter_queue(dead_letter_queue)
+        if error_queue_enabled:
+            error_queue = queue + '.error'
+            self.__create_error_queue(error_queue)
 
         if max_retries > 0 and retry_delay > 0:
             retry_queue = queue + '.retry'
@@ -144,9 +144,9 @@ class Transport(base.Transport):
         if channel:
             channel.close()
 
-    def __create_dead_letter_queue(self, dead_letter_queue):
+    def __create_error_queue(self, error_queue):
         with self.__connection.channel() as channel:
-            channel.queue.declare(dead_letter_queue, durable=True)
+            channel.queue.declare(error_queue, durable=True)
 
     def __create_retry_queue(self, queue, retry_queue, retry_delay):
         args = {
@@ -227,18 +227,18 @@ class Transport(base.Transport):
             self.__on_exception(e)
 
     @staticmethod
-    def __to_message(body, channel, method, properties, dead_letter_queue, retry_queue):
-        return TransportMessage(body, method, properties, channel, dead_letter_queue, retry_queue)
+    def __to_message(body, channel, method, properties, error_queue, retry_queue):
+        return TransportMessage(body, method, properties, channel, error_queue, retry_queue)
 
 
 class TransportMessage(base.TransportMessage):
-    def __init__(self, body, method, properties, channel, dead_letter_queue, retry_queue):
+    def __init__(self, body, method, properties, channel, error_queue, retry_queue):
         super().__init__(body=body)
 
         self.__method = method
         self.__properties = properties
         self.__channel = channel
-        self.__dead_letter_queue = dead_letter_queue
+        self.__error_queue = error_queue
         self.__retry_queue = retry_queue
 
         app_id = properties.get('app_id')
@@ -276,12 +276,12 @@ class TransportMessage(base.TransportMessage):
 
             self.__channel.basic.ack(self.__method.get('delivery_tag'))
 
-            if not self.__dead_letter_queue:
+            if not self.__error_queue:
                 return
 
             self.__channel.basic.publish(
                 self.body,
-                self.__dead_letter_queue,
+                self.__error_queue,
                 '',
                 self.__properties)
             self.__channel = None

@@ -108,8 +108,8 @@ class TestPuller(TestCase):
             self.assertEqual(key, message)
             self.bus.loop.stop()
 
-        self.bus.pull(self.queue, handle, dead_letter_enabled=True)
-        self.bus.pull(self.queue + '.error', handle_error, dead_letter_enabled=False)
+        self.bus.pull(self.queue, handle, error_queue_enabled=True)
+        self.bus.pull(self.queue + '.error', handle_error, error_queue_enabled=False)
         self.bus.push(self.queue, key)
         self.bus.loop.start()
 

@@ -31,7 +31,7 @@ class Config(object):
     #: '*' is the default configuration for all queues.
     SIMPLEBUS_QUEUES = {
         '*': {
-            'dead_letter_enabled': True,
+            'error_queue_enabled': True,
             'expiration': None,
             'max_retries': 3,
             'retry_delay': 1000,
