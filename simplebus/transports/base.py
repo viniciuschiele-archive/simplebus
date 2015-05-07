@@ -152,8 +152,8 @@ class TransportMessage(object):
         """Deletes this message from the broker."""
         pass
 
-    def dead_letter(self, reason):
-        """Deliveries this message to the specified dead letter."""
+    def error(self, reason):
+        """Deliveries this message to the specified error queue."""
         pass
 
     def retry(self):

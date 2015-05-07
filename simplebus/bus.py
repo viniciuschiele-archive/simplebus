@@ -23,8 +23,10 @@ from simplebus.cancellables import Cancellation
 from simplebus.cancellables import Subscription
 from simplebus.dispatchers import PullerDispatcher
 from simplebus.dispatchers import SubscriberDispatcher
+from simplebus.exceptions import SerializerNotFoundError
 from simplebus.handlers import CallbackHandler
 from simplebus.handlers import MessageHandler
+from simplebus.serialization import MessageSerializers
 from simplebus.state import set_current_bus
 from simplebus.transports import create_transport
 from simplebus.transports.base import TransportMessage
@@ -44,6 +46,7 @@ class Bus(object):
         self.__queues_cached = {}
         self.__topics_cached = {}
         self.__loop = Loop()
+        self.__serializers = MessageSerializers()
         self.config = Config()
 
     @property
@@ -60,6 +63,9 @@ class Bus(object):
 
         if len(self.config.SIMPLEBUS_ENDPOINTS) == 0:
             raise RuntimeError('SimpleBus must have at least one endpoint')
+
+        for name, ser in self.config.SIMPLEBUS_SERIALIZERS.items():
+            self.__serializers.register(name, ser)
 
         for key, endpoint in self.config.SIMPLEBUS_ENDPOINTS.items():
             transport = create_transport(
@@ -82,6 +88,8 @@ class Bus(object):
             transport.close()
         self.__transports.clear()
 
+        self.__serializers.unregister_all()
+
         set_current_bus(None)
 
     def push(self, queue, message, **options):
@@ -90,11 +98,12 @@ class Bus(object):
         self.__ensure_started()
 
         options = self.__get_queue_options(queue, options)
+        serializer = self.__serializers.get(options.get('serializer'))
         transport = self.__get_transport(options.get('endpoint'))
         transport_message = TransportMessage(self.__app_id,
                                              create_random_id(),
-                                             'application/json',
-                                             simplejson.dumps(message),
+                                             serializer.content_type,
+                                             serializer.serialize(message),
                                              options.get('expiration'))
         transport.push(queue, transport_message, options)
 
@@ -104,9 +113,9 @@ class Bus(object):
         self.__ensure_started()
 
         id = create_random_id()
-        handler = self.__get_handler(callback)
-        dispatcher = PullerDispatcher(queue, handler)
         options = self.__get_queue_options(queue, options)
+        handler = self.__get_handler(callback)
+        dispatcher = PullerDispatcher(queue, handler, self.__serializers, options.get('serializer'))
         transport = self.__get_transport(options.get('endpoint'))
         transport.pull(id, queue, dispatcher, options)
         return Cancellation(id, transport)
@@ -117,11 +126,12 @@ class Bus(object):
         self.__ensure_started()
 
         options = self.__get_topic_options(topic, options)
+        serializer = self.__serializers.get(options.get('serializer'))
         transport = self.__get_transport(options.get('endpoint'))
         transport_message = TransportMessage(self.__app_id,
                                              create_random_id(),
-                                             'application/json',
-                                             simplejson.dumps(message),
+                                             serializer.content_type,
+                                             serializer.serialize(message),
                                              options.get('expiration'))
         transport.publish(topic, transport_message, options)
 
@@ -131,9 +141,9 @@ class Bus(object):
         self.__ensure_started()
 
         id = create_random_id()
-        handler = self.__get_handler(callback)
-        dispatcher = SubscriberDispatcher(topic, handler)
         options = self.__get_topic_options(topic, options)
+        handler = self.__get_handler(callback)
+        dispatcher = SubscriberDispatcher(topic, handler, self.__serializers, options.get('serializer'))
         transport = self.__get_transport(options.get('endpoint'))
         transport.subscribe(id, topic, dispatcher, options)
         return Subscription(id, transport)
@@ -193,6 +203,12 @@ class Bus(object):
             options.update(override_options)
 
         return options
+
+    def __get_serializer(self, content_type):
+        for ser in self.config.SIMPLEBUS_SERIALIZERS:
+            if ser.content_type == content_type:
+                return ser
+        raise SerializerNotFoundError("Serializer not found for the content type '%s'." % content_type)
 
     def __get_transport(self, endpoint):
         """Gets the transport for the specified endpoint."""

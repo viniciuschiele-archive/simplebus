@@ -21,6 +21,8 @@ from simplebus import Config
 from simplebus import transport_message
 from simplebus import MessageHandler
 from simplebus import pull
+from simplebus import SerializationError
+from simplebus import SerializerNotFoundError
 from simplebus import subscribe
 from tests import create_bus
 from unittest import TestCase
@@ -130,6 +132,9 @@ class TestPuller(TestCase):
         self.bus.pull(self.queue, handle, max_retries=1, retry_delay=200)
         self.bus.push(self.queue, 'hello')
         self.bus.loop.start()
+
+    def test_serializer_not_found(self):
+        self.assertRaises(SerializerNotFoundError, self.bus.push, self.queue, 'hello', serializer='unknown')
 
 
 class TestSubscriber(TestCase):

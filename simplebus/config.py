@@ -14,6 +14,7 @@
 
 """Implements the configuration related objects."""
 
+from simplebus.serialization import JsonSerializer
 from simplebus.utils import merge_dict
 
 
@@ -35,7 +36,8 @@ class Config(object):
             'max_retries': 3,
             'retry_delay': 1000,
             'prefetch_count': 10,
-            'endpoint': None
+            'endpoint': None,
+            'serializer': 'json'
         }
     }
 
@@ -43,9 +45,11 @@ class Config(object):
     #: '*' is the default configuration for all topics.
     SIMPLEBUS_TOPICS = {
         '*': {
+            'content_type': 'application/json',
             'expiration': None,
             'prefetch_count': 10,
-            'endpoint': None
+            'endpoint': None,
+            'serializer': 'json'
         }
     }
 
@@ -55,6 +59,11 @@ class Config(object):
     #: Number of seconds between retries of reconnecting.
     #: Default is 3 seconds.
     SIMPLEBUS_RECOVERY_DELAY = 3
+
+    #: Serializers supported.
+    SIMPLEBUS_SERIALIZERS = {
+        'json': JsonSerializer()
+    }
 
     def from_object(self, obj):
         """Load values from an object."""

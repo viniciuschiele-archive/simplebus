@@ -19,10 +19,11 @@ dispatch them to the message handlers.
 
 
 import logging
-import simplejson
 
 from abc import ABCMeta
 from abc import abstractmethod
+from simplebus.exceptions import SerializationError
+from simplebus.exceptions import SerializerNotFoundError
 from simplebus.state import set_transport_message
 
 
@@ -45,19 +46,27 @@ class PullerDispatcher(MessageDispatcher):
     Dispatcher responsible for receiving messages from the queue and
     send them to the message handler.
     """
-    def __init__(self, queue, handler):
+    def __init__(self, queue, handler, serializers, default_serializer):
         self.__queue = queue
         self.__handler = handler
+        self.__serializers = serializers
+        self.__default_serializer = default_serializer
 
     def dispatch(self, transport_message):
         """Dispatches the message."""
 
-        content = simplejson.loads(transport_message.body)
-
         set_transport_message(transport_message)
 
         try:
-            self.__handler.handle(content)
+            if transport_message.content_type:
+                serializer = self.__serializers.find(transport_message.content_type)
+            else:
+                serializer = self.__serializers.get(self.__default_serializer)
+            message = serializer.deserialize(transport_message.body)
+            self.__handler.handle(message)
+        except (SerializerNotFoundError, SerializationError) as e:
+            transport_message.error(e.message)
+            LOGGER.exception(e.message)
         except:
             LOGGER.exception("Error processing message '%s' from the queue '%s'." %
                              (transport_message.message_id, self.__queue))
@@ -74,19 +83,24 @@ class SubscriberDispatcher(MessageDispatcher):
     send them to the message handler.
     """
 
-    def __init__(self, topic, handler):
+    def __init__(self, topic, handler, serializers, default_serializer):
         self.__topic = topic
         self.__handler = handler
+        self.__serializers = serializers
+        self.__default_serializer = default_serializer
 
     def dispatch(self, transport_message):
         """Dispatches the message."""
 
-        content = simplejson.loads(transport_message.body)
-
         set_transport_message(transport_message)
 
         try:
-            self.__handler.handle(content)
+            if transport_message.content_type:
+                serializer = self.__serializers.find(transport_message.content_type)
+            else:
+                serializer = self.__serializers.get(self.__default_serializer)
+            message = serializer.deserialize(transport_message.body)
+            self.__handler.handle(message)
         except:
             LOGGER.exception(
                 "Error processing the message '%s' from the topic '%s'." %

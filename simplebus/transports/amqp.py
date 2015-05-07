@@ -81,7 +81,7 @@ class Transport(base.Transport):
             message = self.__to_message(body, ch, method, properties, dead_letter_queue, retry_queue)
 
             if message.retry_count > max_retries:
-                message.dead_letter('Max retry exceeded.')
+                message.error('Max retry exceeded.')
             else:
                 callback(message)
 
@@ -269,7 +269,7 @@ class TransportMessage(base.TransportMessage):
             self.__channel.basic.ack(self.__method.get('delivery_tag'))
             self.__channel = None
 
-    def dead_letter(self, reason):
+    def error(self, reason):
         if self.__channel:
             self.__set_header_retry_count(0)
             self.__set_header_death_reason(reason)
