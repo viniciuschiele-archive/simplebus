@@ -1,4 +1,3 @@
-Custom serializers.
 Create custom exceptions instead of throwing the native exception.
 Compression.
 Concurrency for pull and subscribe methods.
