@@ -204,6 +204,7 @@ class Transport(base.Transport):
             'app_id': message.app_id,
             'message_id': message.message_id,
             'content_type': message.content_type,
+            'content_encoding': message.content_encoding,
             'delivery_mode': 2
         }
 
@@ -252,6 +253,10 @@ class TransportMessage(base.TransportMessage):
         content_type = properties.get('content_type')
         if content_type:
             self.content_type = bytes.decode(content_type)
+
+        content_encoding = properties.get('content_encoding')
+        if content_encoding:
+            self.content_encoding = bytes.decode(content_encoding)
 
         headers = properties.get('headers')
         if not headers:
