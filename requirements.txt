@@ -1,2 +1,0 @@
-simplejson>=3.6.5
-pylint>=1.4.3
