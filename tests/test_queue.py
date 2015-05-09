@@ -17,34 +17,15 @@
 import datetime
 import uuid
 
-from simplebus import Config
 from simplebus import transport_message
 from simplebus import MessageHandler
 from simplebus import pull
-from simplebus import SerializationError
 from simplebus import SerializerNotFoundError
-from simplebus import subscribe
 from tests import create_bus
 from unittest import TestCase
 
 
-class TestConfig(TestCase):
-    def test_default(self):
-        config = Config()
-        self.assertEqual('amqp://guest:guest@localhost/', config.SIMPLEBUS_ENDPOINTS.get('default'))
-
-    def test_from_object(self):
-        config = Config()
-        config.from_object(self.CustomConfig())
-        self.assertEqual('amqp://test:test@localhost/', config.SIMPLEBUS_ENDPOINTS.get('default'))
-
-    class CustomConfig(object):
-        SIMPLEBUS_ENDPOINTS = {
-            'default': 'amqp://test:test@localhost/'
-        }
-
-
-class TestPuller(TestCase):
+class TestQueue(TestCase):
     queue = 'tests.queue1'
 
     def setUp(self):
@@ -136,48 +117,24 @@ class TestPuller(TestCase):
     def test_serializer_not_found(self):
         self.assertRaises(SerializerNotFoundError, self.bus.push, self.queue, 'hello', serializer='unknown')
 
+    def test_serializer_binary(self):
+        def handle(message):
+            self.assertEqual('application/data', transport_message.content_type)
+            self.assertEqual('binary', transport_message.content_encoding)
+            self.assertEqual(b'hello', message)
+            self.bus.loop.stop()
 
-class TestSubscriber(TestCase):
-    topic = 'tests.topic1'
-
-    def setUp(self):
-        self.bus = create_bus()
-        self.bus.start()
-
-    def tearDown(self):
-        self.bus.stop()
-
-    def test_subscribe_as_class(self):
-        class Handler1(MessageHandler):
-            def handle(self_, message):
-                self.assertEqual('hello', message)
-                self.bus.loop.stop()
-
-        self.bus.subscribe(self.topic, Handler1())
-        self.bus.publish(self.topic, 'hello')
+        self.bus.pull(self.queue, handle)
+        self.bus.push(self.queue, b'hello', serializer='raw')
         self.bus.loop.start()
 
-    def test_subscribe_as_decorator(self):
-        @subscribe(self.topic)
+    def test_serializer_text(self):
         def handle(message):
+            self.assertEqual('text/plain', transport_message.content_type)
+            self.assertEqual('utf-8', transport_message.content_encoding)
             self.assertEqual('hello', message)
             self.bus.loop.stop()
 
-        self.bus.publish(self.topic, 'hello')
+        self.bus.pull(self.queue, handle)
+        self.bus.push(self.queue, 'hello', serializer='raw')
         self.bus.loop.start()
-
-    def test_subscribe_as_function(self):
-        def handle(message):
-            self.assertEqual('hello', message)
-            self.bus.loop.stop()
-
-        self.bus.subscribe(self.topic, handle)
-        self.bus.publish(self.topic, 'hello')
-        self.bus.loop.start()
-
-    def test_unsubscribe(self):
-        def handle(message):
-            pass
-
-        subscription = self.bus.subscribe(self.topic, handle)
-        subscription.cancel()
