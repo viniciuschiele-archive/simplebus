@@ -25,6 +25,11 @@ try:
 except ImportError:  # pragma: no cover
     import json  # noqa
 
+try:
+    import msgpack
+except ImportError:
+    msgpack = None
+
 
 class SerializerRegistry(object):
     def __init__(self):
@@ -83,10 +88,9 @@ class SerializerRegistry(object):
                 return body
             return self.get(serializer).deserialize(body)
 
-        if content_encoding == 'binary':
-            return body
-
         if content_type:
+            if content_type == 'application/data' and content_encoding == 'binary':
+                return body
             if content_type == 'text/plain':
                 return body.decode(content_encoding or 'utf-8')
             return self.find(content_type).deserialize(body)
@@ -139,3 +143,23 @@ class JsonSerializer(Serializer):
             return json.loads(buffer)
         except Exception as e:
             raise SerializationError(str(e))
+
+
+class MsgPackSerializer(Serializer):
+    def __init__(self):
+        if not msgpack:
+            raise ImportError('Missing msgpack library (pip install msgpack-python)')
+
+    @property
+    def content_type(self):
+        return 'application/x-msgpack'
+
+    @property
+    def content_encoding(self):
+        return 'binary'
+
+    def serialize(self, message):
+        return msgpack.packb(message)
+
+    def deserialize(self, buffer):
+        return msgpack.unpackb(buffer, encoding='utf-8')
