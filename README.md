@@ -1,12 +1,13 @@
 #SimpleBus
 SimpleBus is a messaging library for Python 3. It has been designed to be simple and easy to use.
-SimpleBus is still under heavy development so next changes might break compatibility.
+SimpleBus is still under heavy development so next versions might break compatibility.
 
 ##Features
 - Auto recovery in case of connection fall.
 - Multiple transports. (only amqp implemented so far)
-- Dead Letter Queue, messages that fail all retires are send to an error queue.
 - Retry logic for all messages received, it supports delay between retries.
+- Error queue, messages that fail all retires are send to an error queue.
+- Custom serialization
 - ... more coming
 
 ##Documentation
