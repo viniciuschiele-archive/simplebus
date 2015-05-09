@@ -37,7 +37,7 @@ class Config(object):
             'retry_delay': 1000,
             'prefetch_count': 10,
             'endpoint': None,
-            'serializer': 'json'
+            'serializer': None
         }
     }
 
@@ -49,7 +49,7 @@ class Config(object):
             'expiration': None,
             'prefetch_count': 10,
             'endpoint': None,
-            'serializer': 'json'
+            'serializer': None
         }
     }
 
@@ -59,6 +59,9 @@ class Config(object):
     #: Number of seconds between retries of reconnecting.
     #: Default is 3 seconds.
     SIMPLEBUS_RECOVERY_DELAY = 3
+
+    #: Default serializer used to serialize and deserialize the messages
+    SIMPLEBUS_DEFAULT_SERIALIZER = 'json'
 
     #: Serializers supported.
     SIMPLEBUS_SERIALIZERS = {

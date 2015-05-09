@@ -46,11 +46,11 @@ class PullerDispatcher(MessageDispatcher):
     Dispatcher responsible for receiving messages from the queue and
     send them to the message handler.
     """
-    def __init__(self, queue, handler, serializers, default_serializer):
+    def __init__(self, queue, handler, serializer_registry, serializer):
         self.__queue = queue
         self.__handler = handler
-        self.__serializers = serializers
-        self.__default_serializer = default_serializer
+        self.__serializer_registry = serializer_registry
+        self.__serializer = serializer
 
     def dispatch(self, transport_message):
         """Dispatches the message."""
@@ -58,11 +58,12 @@ class PullerDispatcher(MessageDispatcher):
         set_transport_message(transport_message)
 
         try:
-            if transport_message.content_type:
-                serializer = self.__serializers.find(transport_message.content_type)
-            else:
-                serializer = self.__serializers.get(self.__default_serializer)
-            message = serializer.deserialize(transport_message.body)
+            message = self.__serializer_registry.deserialize(
+                transport_message.body,
+                transport_message.content_type,
+                transport_message.content_encoding,
+                self.__serializer)
+
             self.__handler.handle(message)
         except (SerializerNotFoundError, SerializationError) as e:
             transport_message.error(e.message)
@@ -83,11 +84,11 @@ class SubscriberDispatcher(MessageDispatcher):
     send them to the message handler.
     """
 
-    def __init__(self, topic, handler, serializers, default_serializer):
+    def __init__(self, topic, handler, serializer_registry, serializer):
         self.__topic = topic
         self.__handler = handler
-        self.__serializers = serializers
-        self.__default_serializer = default_serializer
+        self.__serializer_registry = serializer_registry
+        self.__serializer = serializer
 
     def dispatch(self, transport_message):
         """Dispatches the message."""
@@ -95,11 +96,12 @@ class SubscriberDispatcher(MessageDispatcher):
         set_transport_message(transport_message)
 
         try:
-            if transport_message.content_type:
-                serializer = self.__serializers.find(transport_message.content_type)
-            else:
-                serializer = self.__serializers.get(self.__default_serializer)
-            message = serializer.deserialize(transport_message.body)
+            message = self.__serializer_registry.deserialize(
+                transport_message.body,
+                transport_message.content_type,
+                transport_message.content_encoding,
+                self.__serializer)
+
             self.__handler.handle(message)
         except:
             LOGGER.exception(

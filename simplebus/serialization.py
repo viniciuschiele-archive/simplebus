@@ -26,9 +26,18 @@ except ImportError:  # pragma: no cover
     import json  # noqa
 
 
-class MessageSerializers(object):
+class SerializerRegistry(object):
     def __init__(self):
         self.__serializers = {}
+        self.__default_serializer = None
+
+    @property
+    def default_serializer(self):
+        return self.__default_serializer
+
+    @default_serializer.setter
+    def default_serializer(self, value):
+        self.__default_serializer = value
 
     def register(self, name, serializer):
         self.__serializers[name] = serializer
@@ -50,11 +59,55 @@ class MessageSerializers(object):
                 return ser
         raise SerializerNotFoundError("Serializer not found for the content type '%s'." % content_type)
 
+    def serialize(self, message, serializer=None):
+        serializer = serializer or self.default_serializer
 
-class MessageSerializer(metaclass=ABCMeta):
+        if not serializer:
+            raise SerializationError('There is no serializer.')
+
+        if serializer == 'raw':
+            if isinstance(message, bytes):
+                return 'application/data', 'binary', message
+
+            if isinstance(message, str):
+                return 'text/plain', 'utf-8', message.encode()
+
+            raise SerializationError('Message must be a string or bytes to be serialized using Raw.')
+
+        ser = self.get(serializer)
+        return ser.content_type, ser.content_encoding, ser.serialize(message)
+
+    def deserialize(self, body, content_type, content_encoding, serializer=None):
+        if serializer:
+            if serializer == 'raw':
+                return body
+            return self.get(serializer).deserialize(body)
+
+        if content_encoding == 'binary':
+            return body
+
+        if content_type:
+            if content_type == 'text/plain':
+                return body.decode(content_encoding or 'utf-8')
+            return self.find(content_type).deserialize(body)
+
+        if self.default_serializer:
+            if self.default_serializer == 'raw':
+                return body
+            return self.get(self.default_serializer).deserialize(body)
+
+        raise SerializerNotFoundError('Deserialize needs a content_type or a default serializer.')
+
+
+class Serializer(metaclass=ABCMeta):
     @property
     @abstractmethod
     def content_type(self):
+        pass
+
+    @property
+    @abstractmethod
+    def content_encoding(self):
         pass
 
     @abstractmethod
@@ -66,10 +119,14 @@ class MessageSerializer(metaclass=ABCMeta):
         pass
 
 
-class JsonSerializer(MessageSerializer):
+class JsonSerializer(Serializer):
     @property
     def content_type(self):
         return 'application/json'
+
+    @property
+    def content_encoding(self):
+        return 'utf-8'
 
     def serialize(self, message):
         try:
