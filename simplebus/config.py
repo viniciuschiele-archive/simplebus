@@ -14,6 +14,8 @@
 
 """Implements the configuration related objects."""
 
+import copy
+
 from simplebus.serialization import JsonSerializer
 from simplebus.utils import merge_dict
 
@@ -80,8 +82,10 @@ class Config(object):
         """Sets the value for the specified key whether it exists."""
 
         if key == 'SIMPLEBUS_QUEUES':
+            self.SIMPLEBUS_QUEUES = copy.deepcopy(Config.SIMPLEBUS_QUEUES)
             merge_dict(self.SIMPLEBUS_QUEUES, value)
         elif key == 'SIMPLEBUS_TOPICS':
+            self.SIMPLEBUS_TOPICS = copy.deepcopy(Config.SIMPLEBUS_TOPICS)
             merge_dict(self.SIMPLEBUS_TOPICS, value)
         elif hasattr(self.__class__, key):
             setattr(self, key, value)

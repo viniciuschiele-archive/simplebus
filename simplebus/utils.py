@@ -49,18 +49,18 @@ def import_string(import_name):
         raise ImportError(e)
 
 
-def merge_dict(dict1, dict2):
-    """Merge two dicts into the first one."""
+def merge_dict(dst, src):
+    """Merge two dictionaries into the first one."""
 
-    if not dict2:
+    if not src:
         return
 
-    for k, v in dict2.items():
-        if k in dict1:
+    for k, v in src.items():
+        if k in dst:
             if isinstance(v, dict):
-                merge_dict(dict1[k], v)
+                merge_dict(dst[k], v)
                 continue
-        dict1[k] = v
+        dst[k] = v
 
 
 class EventHandler(object):
