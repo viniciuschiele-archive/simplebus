@@ -6,12 +6,13 @@ SimpleBus is still under heavy development so next versions might break compatib
 - Auto recovery in case of connection fall.
 - Multiple transports. (only amqp implemented so far)
 - Retry logic for all messages received, it supports delay between retries.
+- Concurrent threads receiving messages from a specified queue.
 - Error queue, messages that fail all retires are send to an error queue.
-- Custom serialization
+- Custom serialization, implemented json and msgpack.
 - ... more coming
 
 ##Documentation
-Soon...
+Soon... take a look at the examples to see how it works.
 
 ##Installation
 You can install SimpleBus via Python Package Index (PyPI).  
@@ -22,7 +23,3 @@ To use AMQP transport you need to install the [amqp-storm](https://github.com/ea
 
 ##Feedback
 Please use the [Issues](https://github.com/viniciuschiele/simplebus/issues) for feature requests and troubleshooting usage.
-
-
-[![Bitdeli Badge](https://d2weczhvl823v0.cloudfront.net/viniciuschiele/simplebus/trend.png)](https://bitdeli.com/free "Bitdeli Badge")
-
