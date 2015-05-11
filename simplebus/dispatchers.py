@@ -66,8 +66,8 @@ class PullerDispatcher(MessageDispatcher):
 
             self.__handler.handle(message)
         except (SerializerNotFoundError, SerializationError) as e:
-            transport_message.error(e.message)
-            LOGGER.exception(e.message)
+            transport_message.error(str(e))
+            LOGGER.exception(str(e))
         except:
             LOGGER.exception("Error processing message '%s' from the queue '%s'." %
                              (transport_message.message_id, self.__queue))

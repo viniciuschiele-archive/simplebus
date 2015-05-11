@@ -68,9 +68,10 @@ class Transport(base.Transport):
         self.__connection = None
 
     def cancel(self, id):
-        channel = self.__cancellations.pop(id)
-        if channel:
-            channel.close()
+        channels = self.__cancellations.pop(id)
+        if channels:
+            for channel in channels:
+                channel.close()
 
     def push(self, queue, message, options):
         self.__ensure_connection()
@@ -102,16 +103,22 @@ class Transport(base.Transport):
             retry_queue = queue + '.retry'
             self.__create_retry_queue(queue, retry_queue, retry_delay)
 
-        channel = self.__connection.channel()
-        channel.queue.declare(queue, durable=True)
-        channel.basic.qos(options.get('prefetch_count'))
-        channel.basic.consume(on_message, queue, id)
+        max_concurrency = options.get('max_concurrency')
 
-        thread = Thread(target=self.__start_receiving, args=(channel,))
-        thread.daemon = True
-        thread.start()
+        channels = []
 
-        self.__cancellations[id] = channel
+        for i in range(max_concurrency):
+            channel = self.__connection.channel()
+            channel.queue.declare(queue, durable=True)
+            channel.basic.qos(options.get('prefetch_count'))
+            channel.basic.consume(on_message, queue)
+            channels.append(channel)
+
+            thread = Thread(target=self.__start_receiving, args=(channel,))
+            thread.daemon = True
+            thread.start()
+
+        self.__cancellations[id] = channels
 
     def publish(self, topic, message, options):
         self.__ensure_connection()
@@ -126,23 +133,29 @@ class Transport(base.Transport):
 
         queue_name = topic + ':' + id
 
-        channel = self.__connection.channel()
-        channel.exchange.declare(topic, 'topic', durable=True)
-        channel.queue.declare(queue_name, exclusive=True, auto_delete=True)
-        channel.queue.bind(queue_name, topic)
-        channel.basic.qos(options.get('prefetch_count'))
-        channel.basic.consume(on_message, queue_name, id)
+        max_concurrency = options.get('max_concurrency')
 
-        thread = Thread(target=self.__start_receiving, args=(channel,))
-        thread.daemon = True
-        thread.start()
+        channels = []
 
-        self.__subscriptions[id] = channel
+        for i in range(max_concurrency):
+            channel = self.__connection.channel()
+            channel.exchange.declare(topic, 'topic', durable=True)
+            channel.queue.declare(queue_name, auto_delete=True)
+            channel.queue.bind(queue_name, topic)
+            channel.basic.consume(on_message, queue_name)
+            channels.append(channel)
+
+            thread = Thread(target=self.__start_receiving, args=(channel,))
+            thread.daemon = True
+            thread.start()
+
+        self.__subscriptions[id] = channels
 
     def unsubscribe(self, id):
-        channel = self.__subscriptions.pop(id)
-        if channel:
-            channel.close()
+        channels = self.__subscriptions.pop(id)
+        if channels:
+            for channel in channels:
+                channel.close()
 
     def __create_error_queue(self, error_queue):
         with self.__connection.channel() as channel:

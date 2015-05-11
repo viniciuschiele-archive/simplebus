@@ -15,6 +15,7 @@
 """Implements the configuration related objects."""
 
 import copy
+import multiprocessing
 
 from simplebus.serialization import JsonSerializer
 from simplebus.utils import merge_dict
@@ -33,13 +34,14 @@ class Config(object):
     #: '*' is the default configuration for all queues.
     SIMPLEBUS_QUEUES = {
         '*': {
+            'endpoint': None,
             'error_queue_enabled': True,
             'expiration': None,
+            'max_concurrency': multiprocessing.cpu_count(),
             'max_retries': 3,
             'retry_delay': 1000,
             'prefetch_count': 10,
-            'endpoint': None,
-            'serializer': None
+            'serializer': None,
         }
     }
 
@@ -47,11 +49,11 @@ class Config(object):
     #: '*' is the default configuration for all topics.
     SIMPLEBUS_TOPICS = {
         '*': {
-            'content_type': 'application/json',
-            'expiration': None,
-            'prefetch_count': 10,
             'endpoint': None,
-            'serializer': None
+            'expiration': None,
+            'max_concurrency': multiprocessing.cpu_count(),
+            'prefetch_count': 10,
+            'serializer': None,
         }
     }
 

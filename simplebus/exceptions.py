@@ -17,13 +17,9 @@
 
 class SerializationError(Exception):
     """Serialize or Deserialize has failed."""
-
-    def __init__(self, message):
-        self.message = message
+    pass
 
 
 class SerializerNotFoundError(Exception):
     """Serializer not found."""
-
-    def __init__(self, message):
-        self.message = message
+    pass
