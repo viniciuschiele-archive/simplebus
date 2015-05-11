@@ -73,6 +73,7 @@ class TestQueue(TestCase):
     def test_message_properties(self):
         def handle(message):
             self.assertEqual('application/json', transport_message.content_type)
+            self.assertEqual('utf-8', transport_message.content_encoding)
             self.bus.loop.stop()
 
         self.bus.pull(self.queue, handle)
@@ -83,13 +84,14 @@ class TestQueue(TestCase):
         key = str(uuid.uuid4())
 
         def handle(message):
+            self.assertLessEqual(transport_message.retry_count, 2)
             raise RuntimeError('error')
 
         def handle_error(message):
             self.assertEqual(key, message)
             self.bus.loop.stop()
 
-        self.bus.pull(self.queue, handle, error_queue_enabled=True)
+        self.bus.pull(self.queue, handle, error_queue_enabled=True, max_retries=2)
         self.bus.pull(self.queue + '.error', handle_error, error_queue_enabled=False)
         self.bus.push(self.queue, key)
         self.bus.loop.start()
@@ -114,27 +116,18 @@ class TestQueue(TestCase):
         self.bus.push(self.queue, 'hello')
         self.bus.loop.start()
 
-    def test_serializer_not_found(self):
-        self.assertRaises(SerializerNotFoundError, self.bus.push, self.queue, 'hello', serializer='unknown')
+    def test_max_concurrency(self):
+        import threading
 
-    def test_serializer_binary(self):
+        self.thread_ids = []
+
         def handle(message):
-            self.assertEqual('application/data', transport_message.content_type)
-            self.assertEqual('binary', transport_message.content_encoding)
-            self.assertEqual(b'hello', message)
-            self.bus.loop.stop()
+            self.thread_ids.append(threading.current_thread().ident)
+            if len(self.thread_ids) == 2:
+                self.bus.loop.stop()
 
-        self.bus.pull(self.queue, handle)
-        self.bus.push(self.queue, b'hello', serializer='raw')
+        self.bus.pull(self.queue, handle, max_concurrency=2, prefetch_count=1)
+        self.bus.push(self.queue, 'hello')
+        self.bus.push(self.queue, 'hello')
         self.bus.loop.start()
-
-    def test_serializer_text(self):
-        def handle(message):
-            self.assertEqual('text/plain', transport_message.content_type)
-            self.assertEqual('utf-8', transport_message.content_encoding)
-            self.assertEqual('hello', message)
-            self.bus.loop.stop()
-
-        self.bus.pull(self.queue, handle)
-        self.bus.push(self.queue, 'hello', serializer='raw')
-        self.bus.loop.start()
+        self.assertIsNot(self.thread_ids[0], self.thread_ids[1])

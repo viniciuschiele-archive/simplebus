@@ -64,3 +64,19 @@ class TestTopic(TestCase):
 
         subscription = self.bus.subscribe(self.topic, handle)
         subscription.cancel()
+
+    def test_max_concurrency_level(self):
+        import threading
+
+        self.thread_ids = []
+
+        def handle(message):
+            self.thread_ids.append(threading.current_thread().ident)
+            if len(self.thread_ids) == 2:
+                self.bus.loop.stop()
+
+        self.bus.subscribe(self.topic, handle, max_concurrency=2, prefetch_count=1)
+        self.bus.publish(self.topic, 'hello')
+        self.bus.publish(self.topic, 'hello')
+        self.bus.loop.start()
+        self.assertIsNot(self.thread_ids[0], self.thread_ids[1])
