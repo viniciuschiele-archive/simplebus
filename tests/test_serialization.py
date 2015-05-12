@@ -76,7 +76,7 @@ class TestSerialization(TestCase):
 
         self.assertEqual('application/json', content_type)
         self.assertEqual('utf-8', content_encoding)
-        self.assertEqual('"hello"', body)
+        self.assertEqual(b'"hello"', body)
 
         message = self.registry.deserialize(body, content_type, content_encoding)
 

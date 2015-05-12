@@ -134,13 +134,13 @@ class JsonSerializer(Serializer):
 
     def serialize(self, message):
         try:
-            return json.dumps(message)
+            return json.dumps(message).encode(self.content_encoding)
         except Exception as e:
             raise SerializationError(str(e))
 
     def deserialize(self, buffer):
         try:
-            return json.loads(buffer)
+            return json.loads(buffer.decode(self.content_encoding))
         except Exception as e:
             raise SerializationError(str(e))
 
