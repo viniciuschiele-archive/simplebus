@@ -49,6 +49,11 @@ class Bus(object):
         self.config = Config()
 
     @property
+    def app_id(self):
+        """Gets the application id."""
+        return self.__app_id
+
+    @property
     def is_started(self):
         """Gets the value whether the bus is started."""
         return self.__started
