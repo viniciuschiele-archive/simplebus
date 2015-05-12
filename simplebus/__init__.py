@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Simple message bus for Python 3+."""
+
 from simplebus.bus import Bus
 from simplebus.cancellables import Cancellable
 from simplebus.config import Config

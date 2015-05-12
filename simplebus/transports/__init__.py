@@ -13,11 +13,11 @@
 # limitations under the License.
 
 from simplebus.transports.base import RecoveryAwareTransport
-from simplebus.utils import import_string
+from simplebus.utils import ref_to_obj
 
 
 TRANSPORT_ALIASES = {
-    'amqp': 'simplebus.transports.amqp.Transport',
+    'amqp': 'simplebus.transports.amqp:Transport',
 }
 
 
@@ -32,7 +32,7 @@ def create_transport(url, recovery_enabled, recovery_delay):
     if class_name is None:
         raise ValueError('Invalid schema %s.' % schema)
 
-    transport_cls = import_string(class_name)
+    transport_cls = ref_to_obj(class_name)
 
     transport = transport_cls(url)
 

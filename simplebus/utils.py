@@ -23,32 +23,6 @@ def create_random_id():
     return str(uuid.uuid4()).replace('-', '')
 
 
-def import_string(import_name):
-    # force the import name to automatically convert to strings
-    # __import__ is not able to handle unicode strings in the fromlist
-    # if the module is a package
-    try:
-        __import__(import_name)
-    except ImportError:
-        if '.' not in import_name:
-            raise
-    else:
-        return sys.modules[import_name]
-
-    module_name, obj_name = import_name.rsplit('.', 1)
-    try:
-        module = __import__(module_name, None, None, [obj_name])
-    except ImportError:
-        # support importing modules not yet set up by the parent module
-        # (or package for that matter)
-        module = import_string(module_name)
-
-    try:
-        return getattr(module, obj_name)
-    except AttributeError as e:
-        raise ImportError(e)
-
-
 def merge_dict(dst, src):
     """Merge two dictionaries into the first one."""
 
@@ -61,6 +35,32 @@ def merge_dict(dst, src):
                 merge_dict(dst[k], v)
                 continue
         dst[k] = v
+
+
+def ref_to_obj(ref):
+    """
+    Returns the object pointed to by ``ref``.
+
+    :type ref: str
+    """
+
+    if not isinstance(ref, str):
+        raise TypeError('References must be strings')
+    if ':' not in ref:
+        raise ValueError('Invalid reference')
+
+    modulename, rest = ref.split(':', 1)
+    try:
+        obj = __import__(modulename)
+    except ImportError:
+        raise LookupError('Error resolving reference %s: could not import module' % ref)
+
+    try:
+        for name in modulename.split('.')[1:] + rest.split('.'):
+            obj = getattr(obj, name)
+        return obj
+    except Exception:
+        raise LookupError('Error resolving reference %s: error looking up object' % ref)
 
 
 class EventHandler(object):
