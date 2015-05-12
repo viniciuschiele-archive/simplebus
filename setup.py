@@ -13,7 +13,6 @@ setup(
     description='A simple message bus for python 3',
     keywords=['simplebus', 'messagebus', 'message bus',
               'messaging', 'queue', 'topic', 'pubsub'],
-    install_requires=['simplejson>=3.6.5'],
     classifiers=[
           'Development Status :: 5 - Production/Stable',
           'Intended Audience :: Developers',
