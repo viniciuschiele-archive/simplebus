@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='simplebus',
-    version='0.6.0',
+    version='0.7.0',
     packages=[
         'simplebus',
         'simplebus.transports'],
