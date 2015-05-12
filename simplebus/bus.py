@@ -16,7 +16,6 @@
 
 
 import inspect
-import simplejson
 
 from simplebus.config import Config
 from simplebus.cancellables import Cancellation
