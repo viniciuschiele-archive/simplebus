@@ -15,6 +15,11 @@
 """This module contains all exceptions used by the SimpleBus API."""
 
 
+class NoRetryError(Exception):
+    """Notifies to the Bus to do not retry the current message."""
+    pass
+
+
 class SerializationError(Exception):
     """Serialize or Deserialize has failed."""
     pass
@@ -22,9 +27,4 @@ class SerializationError(Exception):
 
 class SerializerNotFoundError(Exception):
     """Serializer not found."""
-    pass
-
-
-class NoRetryError(Exception):
-    """Notifies to the Bus to do not retry the current message."""
     pass

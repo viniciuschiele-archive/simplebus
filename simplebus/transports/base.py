@@ -168,7 +168,7 @@ class TransportMessage(object):
         pass
 
     def retry(self):
-        """Redelivery this message to the received again."""
+        """Redelivery this message to be processed again."""
         pass
 
 
@@ -240,11 +240,13 @@ class RecoveryAwareTransport(Transport):
         if subscriber:
             self.__transport.unsubscribe(id)
 
-    def __on_closed(self):
+    def __on_closed(self, by_user):
         """Called when the base transport is closed unexpected."""
 
-        self.closed()
-        self.__start_recovery()
+        self.closed(by_user)
+
+        if not by_user:
+            self.__start_recovery()
 
     def __recover(self):
         """Tries to reconnect to the broker."""
@@ -265,34 +267,24 @@ class RecoveryAwareTransport(Transport):
         """Starts pulling again all queues that were being pulled."""
 
         for cancellation in self.__cancellations.values():
-            id = cancellation.get('id')
-            queue = cancellation.get('queue')
-            callback = cancellation.get('callback')
-            options = cancellation.get('options')
-
             try:
-                self.pull(id, queue, callback, options)
+                self.pull(**cancellation)
             except:
-                LOGGER.critical('Fail pulling the queue %s.' % queue, exc_info=True)
+                LOGGER.critical('Recovering failed for the  %s.' %
+                                cancellation.get('queue'), exc_info=True)
 
     def __recover_subscriptions(self):
         """Subscribes again all topics that were subscribed."""
 
         for subscription in self.__subscriptions.values():
-            id = subscription.get('id')
-            topic = subscription.get('topic')
-            callback = subscription.get('callback')
-            options = subscription.get('options')
-
             try:
-                self.subscribe(id, topic, callback, options)
+                self.subscribe(**subscription)
             except:
-                LOGGER.critical('Fail subscribing the topic %s.' % topic, exc_info=True)
+                LOGGER.critical('Recovering failed for the topic %s.' %
+                                subscription.get('topic'), exc_info=True)
 
     def __start_recovery(self):
         """Starts recovery of transport."""
-
-        LOGGER.critical('Connection to the broker went down.', exc_info=True)
 
         thread = Thread(target=self.__recover)
         thread.daemon = True

@@ -60,18 +60,14 @@ class Transport(base.Transport):
     def close(self):
         if not self.is_open:
             return
-
-        self.__channels.close()
-        self.__channels = None
-
-        self.__connection.close()
-        self.__connection = None
+        self.__close(True)
 
     def cancel(self, id):
-        channels = self.__cancellations.pop(id)
-        if channels:
-            for channel in channels:
-                channel.close()
+        channels = self.__cancellations.pop(id, [])
+        if not channels:
+            return
+        for channel in channels:
+            channel.close()
 
     def push(self, queue, message, options):
         self.__ensure_connection()
@@ -79,12 +75,15 @@ class Transport(base.Transport):
 
     def pull(self, id, queue, callback, options):
         def on_message(body, ch, method, properties):
-            message = self.__to_message(body, ch, method, properties, dead_letter_queue, retry_queue)
+            try:
+                message = self.__to_message(body, ch, method, properties, dead_letter_queue, retry_queue)
 
-            if retry and message.retry_count > max_retries:
-                message.dead_letter('Max retries exceeded.')
-            else:
-                callback(message)
+                if retry and message.retry_count > max_retries:
+                    message.dead_letter('Max retries exceeded.')
+                else:
+                    callback(message)
+            except:
+                LOGGER.error("Puller failed, queue '%s'." % queue)
 
         self.__ensure_connection()
 
@@ -129,8 +128,11 @@ class Transport(base.Transport):
 
     def subscribe(self, id, topic, callback, options):
         def on_message(body, ch, method, properties):
-            message = self.__to_message(body, ch, method, properties, None, None)
-            callback(message)
+            try:
+                message = self.__to_message(body, ch, method, properties, None, None)
+                callback(message)
+            except:
+                LOGGER.error("Subscribe failed, topic: '%s'." % topic)
 
         self.__ensure_connection()
 
@@ -160,6 +162,20 @@ class Transport(base.Transport):
             for channel in channels:
                 channel.close()
 
+    def __close(self, by_user):
+        if self.__channels:
+            self.__channels.close()
+            self.__channels = None
+
+        if self.__connection:
+            self.__connection.close()
+            self.__connection = None
+
+        self.__cancellations.clear()
+        self.__subscriptions.clear()
+
+        self.__on_closed(by_user)
+
     def __create_dead_letter_queue(self, dead_letter_queue):
         with self.__connection.channel() as channel:
             channel.queue.declare(dead_letter_queue, durable=True)
@@ -174,7 +190,7 @@ class Transport(base.Transport):
             with self.__connection.channel() as channel:
                 channel.queue.declare(retry_queue, durable=True, arguments=args)
         except amqpstorm.AMQPChannelError as e:
-            if 'x-message-ttl' not in str(e):
+            if 'x-message-ttl' not in str(e):  # already exists a queue with ttl
                 raise
 
     def __ensure_connection(self):
@@ -190,18 +206,23 @@ class Transport(base.Transport):
             self.__channels = ChannelPool(self.__channel_limit, self.__connection)
             self.__closed_called = False
 
-    def __on_exception(self, exc):
-        if not self.closed:
-            return
+    def __on_exception(self, e):
+        # any error close the connection.
 
-        if self.__closed_called:
-            return
+        LOGGER.critical('Connection to the broker went down.', exc_info=True)
 
-        with self.__closed_lock:
-            if self.__closed_called:
-                return
-            self.__closed_called = True
-            self.closed()
+        self.__close(False)
+
+    def __on_closed(self, by_user):
+        if self.__closed_lock.acquire(False):
+            try:
+                if self.__closed_called:
+                    return
+                self.__closed_called = True
+                if self.closed:
+                    self.closed(by_user)
+            finally:
+                self.__closed_lock.release()
 
     @staticmethod
     def __parse_channel_limit(url):

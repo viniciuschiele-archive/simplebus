@@ -70,7 +70,7 @@ class PullerDispatcher(MessageDispatcher):
             transport_message.dead_letter(str(e))
             LOGGER.exception(str(e))
         except:
-            LOGGER.exception("Error processing message '%s' from the queue '%s'." %
+            LOGGER.exception("Message dispatch failed. message id: '%s', queue: '%s'." %
                              (transport_message.message_id, self.__queue))
             transport_message.retry()
         else:
@@ -106,7 +106,7 @@ class SubscriberDispatcher(MessageDispatcher):
             self.__handler.handle(message)
         except:
             LOGGER.exception(
-                "Error processing the message '%s' from the topic '%s'." %
+                "Message dispatch failed. message id: '%s', topic: '%s'." %
                 (transport_message.message_id, self.__topic))
 
         transport_message.delete()
