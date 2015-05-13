@@ -38,7 +38,7 @@ class Config(object):
             'dead_letter': True,
             'retry': True,
             'max_retries': 3,
-            'retry_delay': 1000,
+            'retry_delay': 0,
             'expiration': None,
             'max_concurrency': multiprocessing.cpu_count(),
             'prefetch_count': 10,

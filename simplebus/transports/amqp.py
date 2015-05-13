@@ -101,8 +101,10 @@ class Transport(base.Transport):
             self.__create_dead_letter_queue(dead_letter_queue)
 
         if retry:
-            retry_queue = queue + '.retry'
-            self.__create_retry_queue(queue, retry_queue, retry_delay)
+            retry_queue = queue
+            if retry_delay > 0:
+                retry_queue += '.retry'
+                self.__create_retry_queue(queue, retry_queue, retry_delay)
 
         max_concurrency = options.get('max_concurrency')
 
