@@ -23,3 +23,8 @@ class SerializationError(Exception):
 class SerializerNotFoundError(Exception):
     """Serializer not found."""
     pass
+
+
+class NoRetryError(Exception):
+    """Notifies to the Bus to do not retry the current message."""
+    pass

@@ -22,6 +22,7 @@ import logging
 
 from abc import ABCMeta
 from abc import abstractmethod
+from simplebus.exceptions import NoRetryError
 from simplebus.exceptions import SerializationError
 from simplebus.exceptions import SerializerNotFoundError
 from simplebus.state import set_transport_message
@@ -65,7 +66,7 @@ class PullerDispatcher(MessageDispatcher):
                 self.__serializer)
 
             self.__handler.handle(message)
-        except (SerializerNotFoundError, SerializationError) as e:
+        except (NoRetryError, SerializerNotFoundError, SerializationError) as e:
             transport_message.dead_letter(str(e))
             LOGGER.exception(str(e))
         except:
