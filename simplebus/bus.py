@@ -14,9 +14,6 @@
 
 """Message bus implementation."""
 
-
-import inspect
-
 from simplebus.config import Config
 from simplebus.cancellables import Cancellation
 from simplebus.cancellables import Subscription
@@ -174,10 +171,10 @@ class Bus(object):
         if isinstance(callback, MessageHandler):
             return callback
 
-        if inspect.isfunction(callback):
+        if callable(callback):
             return CallbackHandler(callback)
 
-        raise TypeError('Parameter handler must be an instance of MessageHandler or a function.')
+        raise TypeError('Parameter callback must be an instance of MessageHandler or a callable object.')
 
     def __get_queue_options(self, queue, override_options):
         """Gets the options for the specified queue."""
