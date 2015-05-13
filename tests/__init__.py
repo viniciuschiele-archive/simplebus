@@ -28,7 +28,7 @@ class BusConfig(object):
 
     SIMPLEBUS_QUEUES = {
         '*': {
-            'error_queue_enabled': False,
-            'max_retries': 0
+            'dead_letter': False,
+            'retry': False
         }
     }
