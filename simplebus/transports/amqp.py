@@ -81,8 +81,8 @@ class Transport(base.Transport):
         def on_message(body, ch, method, properties):
             message = self.__to_message(body, ch, method, properties, error_queue, retry_queue)
 
-            if message.retry_count > max_retries:
-                message.error('Max retry exceeded.')
+            if retry and message.retry_count > max_retries:
+                message.error('Max retries exceeded.')
             else:
                 callback(message)
 
@@ -91,15 +91,16 @@ class Transport(base.Transport):
         error_queue = None
         error_queue_enabled = options.get('error_queue_enabled')
 
-        retry_queue = None
+        retry = options.get('retry')
         max_retries = options.get('max_retries')
         retry_delay = options.get('retry_delay')
+        retry_queue = None
 
         if error_queue_enabled:
             error_queue = queue + '.error'
             self.__create_error_queue(error_queue)
 
-        if max_retries > 0 and retry_delay > 0:
+        if retry:
             retry_queue = queue + '.retry'
             self.__create_retry_queue(queue, retry_queue, retry_delay)
 

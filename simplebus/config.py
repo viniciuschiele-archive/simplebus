@@ -35,11 +35,12 @@ class Config(object):
     SIMPLEBUS_QUEUES = {
         '*': {
             'endpoint': None,
-            'error_queue_enabled': True,
-            'expiration': None,
-            'max_concurrency': multiprocessing.cpu_count(),
+            'dead_letter': True,
+            'retry': True,
             'max_retries': 3,
             'retry_delay': 1000,
+            'expiration': None,
+            'max_concurrency': multiprocessing.cpu_count(),
             'prefetch_count': 10,
             'serializer': None,
         }
