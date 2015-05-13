@@ -12,7 +12,7 @@ Features
 - Multiple transports. (only amqp implemented so far)
 - Retry logic for all messages received, it supports delay between retries.
 - Concurrent threads receiving messages from a specified queue.
-- Error queue, messages that fail all retires are send to an error queue.
+- Dead letter, messages that fail all retires are send to an dead letter queue.
 - Custom serialization, implemented json and msgpack.
 - ... more coming
 
