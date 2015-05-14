@@ -61,9 +61,14 @@ class Config(object):
     #: If enabled the bus will try to reconnect if the connection goes down.
     SIMPLEBUS_RECOVERY = True
 
-    #: Number of seconds between retries of reconnecting.
-    #: Default is 3 seconds.
-    SIMPLEBUS_RECOVERY_DELAY = 3
+    #: The minimum number of seconds to wait before retrying connect to the broker.
+    SIMPLEBUS_RECOVERY_MIN_DELAY = 0
+
+    #: The interval in seconds to use to exponentially increment the retry interval by.
+    SIMPLEBUS_RECOVERY_DELTA_DELAY = 1
+
+    #: The maximum number of seconds to wait before retrying connect to the broker.
+    SIMPLEBUS_RECOVERY_MAX_DELAY = 8
 
     #: Serializers supported.
     SIMPLEBUS_SERIALIZERS = {

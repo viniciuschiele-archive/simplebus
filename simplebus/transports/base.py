@@ -177,11 +177,13 @@ class RecoveryAwareTransport(Transport):
     Transport that provides auto reconnection for a base transport.
     """
 
-    def __init__(self, transport, recovery_delay):
+    def __init__(self, transport, recovery_min_delay, recovery_delta_delay, recovery_max_delay):
         self.__is_open = False
         self.__cancellations = {}
         self.__subscriptions = {}
-        self.__recovery_delay = recovery_delay
+        self.__recovery_min_delay = recovery_min_delay
+        self.__recovery_delta_delay = recovery_delta_delay
+        self.__recovery_max_delay = recovery_max_delay
         self.__transport = transport
         self.__transport.closed += self.__on_closed
         self.closed = EventHandler()
@@ -260,7 +262,10 @@ class RecoveryAwareTransport(Transport):
                 self.__recover_subscriptions()
                 LOGGER.info('Connection re-established to the broker.')
             except:
-                time.sleep(self.__recovery_delay)
+                delay = (2*(count-1)) * self.__recovery_delta_delay + self.__recovery_min_delay
+                if delay > self.__recovery_max_delay:
+                    delay = self.__recovery_max_delay
+                time.sleep(delay)
                 count += 1
 
     def __recover_cancellations(self):

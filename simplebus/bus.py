@@ -19,7 +19,6 @@ from simplebus.cancellables import Cancellation
 from simplebus.cancellables import Subscription
 from simplebus.dispatchers import PullerDispatcher
 from simplebus.dispatchers import SubscriberDispatcher
-from simplebus.exceptions import SerializerNotFoundError
 from simplebus.handlers import CallbackHandler
 from simplebus.handlers import MessageHandler
 from simplebus.serialization import SerializerRegistry
@@ -72,7 +71,9 @@ class Bus(object):
             transport = create_transport(
                 endpoint,
                 self.config.SIMPLEBUS_RECOVERY,
-                self.config.SIMPLEBUS_RECOVERY_DELAY)
+                self.config.SIMPLEBUS_RECOVERY_MIN_DELAY,
+                self.config.SIMPLEBUS_RECOVERY_DELTA_DELAY,
+                self.config.SIMPLEBUS_RECOVERY_MAX_DELAY)
             transport.open()
             self.__transports[key] = transport
 
@@ -212,12 +213,6 @@ class Bus(object):
             options.update(override_options)
 
         return options
-
-    def __get_serializer(self, content_type):
-        for ser in self.config.SIMPLEBUS_SERIALIZERS:
-            if ser.content_type == content_type:
-                return ser
-        raise SerializerNotFoundError("Serializer not found for the content type '%s'." % content_type)
 
     def __get_transport(self, endpoint):
         """Gets the transport for the specified endpoint."""

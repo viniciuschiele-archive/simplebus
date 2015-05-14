@@ -21,9 +21,9 @@ TRANSPORT_ALIASES = {
 }
 
 
-def create_transport(url, recovery_enabled, recovery_delay):
+def create_transport(url, recovery_enabled, recovery_min_delay, recovery_delta_delay, recovery_max_delay):
     if '://' not in url:
-        raise ValueError('Invalid url.')
+        raise ValueError('Invalid url %s.' % url)
 
     schema = url.partition('://')[0]
 
@@ -39,7 +39,13 @@ def create_transport(url, recovery_enabled, recovery_delay):
     if not recovery_enabled:
         return transport
 
-    if recovery_delay < 1:
-        raise ValueError('recovery_delay must be greater than 0')
+    if recovery_min_delay < 0:
+        raise ValueError('recovery_min_delay should be greater or equal to 0')
 
-    return RecoveryAwareTransport(transport, recovery_delay)
+    if recovery_min_delay > recovery_max_delay:
+        raise ValueError('recovery_min_delay should be less or equal to recovery_max_delay')
+
+    if recovery_delta_delay < 1:
+        raise ValueError('recovery_delta_delay should be greater than 0')
+
+    return RecoveryAwareTransport(transport, recovery_min_delay, recovery_delta_delay, recovery_max_delay)
