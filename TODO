@@ -1,4 +1,0 @@
-Create custom exceptions instead of throwing the native exception.
-Compression.
-Retry logic for push and publish methods
-Strategy for transport recovery logic.
