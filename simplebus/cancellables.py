@@ -37,7 +37,6 @@ class Cancellation(Cancellable):
 
     def cancel(self):
         """Cancels the receipt of messages."""
-
         self.__transport.cancel(self.__id)
 
 
@@ -50,5 +49,4 @@ class Subscription(Cancellable):
 
     def cancel(self):
         """Cancels the receipt of messages."""
-
         self.__transport.unsubscribe(self.__id)

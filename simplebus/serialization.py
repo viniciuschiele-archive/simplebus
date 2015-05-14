@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Classes used to cancel the receiving messages from the broker."""
+"""Implements the serialization related objects."""
 
 import codecs
 
@@ -33,22 +33,30 @@ except ImportError:
 
 
 class SerializerRegistry(object):
+    """Stores the serializers used by simplebus."""
+
     def __init__(self):
         self.__serializers = {}
 
     def register(self, name, serializer):
+        """Register a new serializer."""
         self.__serializers[name] = serializer
 
     def unregister_all(self):
+        """Unregister all serializers."""
         self.__serializers.clear()
 
     def get(self, name):
+        """Gets the serializer by the name."""
+
         serializer = self.__serializers.get(name)
         if serializer:
             return serializer
         raise SerializerNotFoundError("Serializer '%s' not found." % name)
 
     def serialize(self, message, serializer=None):
+        """Serializes the specified message using the specified serializer."""
+
         if serializer:
             ser = self.get(serializer)
             return ser.content_type, ser.content_encoding, ser.serialize(message)
@@ -61,6 +69,8 @@ class SerializerRegistry(object):
         raise SerializationError('Message should be bytes or str to be serialized.')
 
     def deserialize(self, body, content_encoding, serializer=None):
+        """Deserializes the specified message using the specified serializer."""
+
         if serializer:
             return self.get(serializer).deserialize(body)
 
@@ -70,41 +80,55 @@ class SerializerRegistry(object):
 
 
 class Serializer(metaclass=ABCMeta):
+    """Base class for a serializer."""
+
     @property
     @abstractmethod
     def content_type(self):
+        """Gets the content type used to serialize."""
         pass
 
     @property
     @abstractmethod
     def content_encoding(self):
+        """Gets the content encoding used to serialize."""
         pass
 
     @abstractmethod
-    def serialize(self, message):
+    def serialize(self, value):
+        """Serializes the specified value into bytes."""
         pass
 
     @abstractmethod
     def deserialize(self, buffer):
+        """Deserializes the specified bytes into a object."""
         pass
 
 
 class JsonSerializer(Serializer):
+    """Json serializer."""
+
     @property
     def content_type(self):
+        """Gets the content type used to serialize."""
         return 'application/json'
 
     @property
     def content_encoding(self):
+        """Gets the content encoding used to serialize."""
         return 'utf-8'
 
     def serialize(self, message):
+        """Serializes the specified value into bytes."""
+
         try:
             return json.dumps(message).encode(self.content_encoding)
         except Exception as e:
             raise SerializationError(str(e))
 
     def deserialize(self, buffer):
+        """Deserializes the specified bytes into a object."""
+
         try:
             return json.loads(buffer.decode(self.content_encoding))
         except Exception as e:
@@ -112,20 +136,34 @@ class JsonSerializer(Serializer):
 
 
 class MsgPackSerializer(Serializer):
+    """msgpack serializer."""
+
     def __init__(self):
         if not msgpack:
             raise ImportError('Missing msgpack library (pip install msgpack-python)')
 
     @property
     def content_type(self):
+        """Gets the content type used to serialize."""
         return 'application/x-msgpack'
 
     @property
     def content_encoding(self):
+        """Gets the content encoding used to serialize."""
         return 'binary'
 
     def serialize(self, message):
-        return msgpack.packb(message)
+        """Serializes the specified value into bytes."""
+
+        try:
+            return msgpack.packb(message)
+        except Exception as e:
+            raise SerializationError(str(e))
 
     def deserialize(self, buffer):
-        return msgpack.unpackb(buffer, encoding='utf-8')
+        """Deserializes the specified bytes into a object."""
+
+        try:
+            return msgpack.unpackb(buffer, encoding='utf-8')
+        except Exception as e:
+            raise SerializationError(str(e))
