@@ -14,17 +14,12 @@
 
 from simplebus import Bus
 
-bus = Bus(app_id='max_concurrency')
-
 
 def on_message(message):
     print("Message:", message)
 
 
-def consume():
-    bus.pull('simple_queue', on_message, max_concurrency=2)  # 2 threads consuming messages
-
-
 if __name__ == '__main__':
-    consume()
+    bus = Bus(app_id='max_concurrency')
+    bus.pull('simple_queue', on_message, max_concurrency=2)  # 2 threads consuming messages
     bus.loop.start()  # block the current thread

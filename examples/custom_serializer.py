@@ -34,18 +34,19 @@ class CustomSerializer(Serializer):
         pass
 
 
-bus = Bus(app_id='custom_serializer')
-bus.config.SIMPLEBUS_SERIALIZERS['custom'] = CustomSerializer()
+class Config(object):
+    SIMPLEBUS_SERIALIZERS = {
+        'custom': CustomSerializer()
+    }
 
 
-def send():
+if __name__ == '__main__':
+    bus = Bus(app_id='custom_serializer')
+    bus.config.from_object(Config())
+
     message = {
         'property1': 'value1',
         'property2': 2
     }
 
     bus.push('simple_queue', message, serializer='custom')
-
-
-if __name__ == '__main__':
-    send()

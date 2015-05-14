@@ -14,17 +14,12 @@
 
 from simplebus import Bus
 
-bus = Bus(app_id='pull_queue')
-
 
 def on_message(message):
     print("Message:", message)
 
 
-def consume():
-    bus.pull('simple_queue', on_message)
-
-
 if __name__ == '__main__':
-    consume()
+    bus = Bus(app_id='pull_queue')
+    bus.pull('simple_queue', on_message)
     bus.loop.start()  # block the current thread

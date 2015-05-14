@@ -14,17 +14,12 @@
 
 from simplebus import Bus
 
-bus = Bus(app_id='push_queue')
 
-
-def send():
+if __name__ == '__main__':
     message = {
         'property1': 'value1',
         'property2': 2
     }
-
+    bus = Bus(app_id='push_queue')
     bus.push('simple_queue', message)
 
-
-if __name__ == '__main__':
-    send()

@@ -14,17 +14,14 @@
 
 from simplebus import Bus
 
-bus = Bus(app_id='publish_topic')
 
-
-def send():
+if __name__ == '__main__':
     message = {
         'property1': 'value1',
         'property2': 2
     }
 
+    bus = Bus(app_id='publish_topic')
     bus.publish('simple_topic', message)
 
 
-if __name__ == '__main__':
-    send()

@@ -14,17 +14,11 @@
 
 from simplebus import Bus
 
-bus = Bus(app_id='max_retries')
-
 
 def on_message(message):
     print("Message:", message)
 
-
-def consume():
-    bus.pull('simple_queue', on_message, max_retries=10, retry_delay=500)  # 500 ms between retries
-
-
 if __name__ == '__main__':
-    consume()
+    bus = Bus(app_id='max_retries')
+    bus.pull('simple_queue', on_message, max_retries=10, retry_delay=500)  # 500 ms between retries
     bus.loop.start()  # block the current thread

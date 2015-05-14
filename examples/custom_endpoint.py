@@ -14,18 +14,20 @@
 
 from simplebus import Bus
 
-bus = Bus(app_id='custom_endpoint')
-bus.config.SIMPLEBUS_ENDPOINTS['custom'] = 'amqp://guest:guest@localhost'
+
+class Config(object):
+    SIMPLEBUS_ENDPOINTS = {
+        'custom': 'amqp://guest:guest@localhost'
+    }
 
 
-def send():
+if __name__ == '__main__':
+    bus = Bus(app_id='custom_endpoint')
+    bus.config.from_object(Config())
+
     message = {
         'property1': 'value1',
         'property2': 2
     }
 
     bus.push('simple_queue', message, endpoint='custom')
-
-
-if __name__ == '__main__':
-    send()

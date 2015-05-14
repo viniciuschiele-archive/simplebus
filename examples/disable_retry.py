@@ -14,17 +14,12 @@
 
 from simplebus import Bus
 
-bus = Bus(app_id='disable_retry.py')
-
 
 def on_message(message):
     raise Exception('error')
 
 
-def consume():
-    bus.pull('simple_queue', on_message, retry=False)
-
-
 if __name__ == '__main__':
-    consume()
+    bus = Bus(app_id='disable_retry.py')
+    bus.pull('simple_queue', on_message, retry=False)
     bus.loop.start()  # block the current thread

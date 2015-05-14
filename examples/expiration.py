@@ -14,17 +14,12 @@
 
 from simplebus import Bus
 
-bus = Bus(app_id='expiration')
-
-
-def send():
+if __name__ == '__main__':
     message = {
         'property1': 'value1',
         'property2': 2
     }
 
+    bus = Bus(app_id='expiration')
     bus.push('simple_queue', message, expiration=5000)  # 5 seconds
 
-
-if __name__ == '__main__':
-    send()

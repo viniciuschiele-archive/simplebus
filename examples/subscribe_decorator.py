@@ -16,6 +16,7 @@ from simplebus import Bus
 from simplebus import subscribe
 
 bus = Bus(app_id='subscribe_decorator')
+bus.start()
 
 
 @subscribe('simple_topic')

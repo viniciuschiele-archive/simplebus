@@ -16,6 +16,7 @@ from simplebus import Bus
 from simplebus import pull
 
 bus = Bus(app_id='pull_decorator')
+bus.start()
 
 
 @pull('simple_queue')
