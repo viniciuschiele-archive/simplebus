@@ -190,7 +190,7 @@ class Transport(base.Transport):
 
 
 class TransportMessage(base.TransportMessage):
-    def __init__(self, body, method, properties, channel, dead_letter_queue, retry_queue):
+    def __init__(self, body, method, properties, channel, dead_letter_queue=None, retry_queue=None):
         super().__init__(body=body)
 
         self.__method = method
@@ -422,7 +422,7 @@ class Subscriber(Consumer):
 
     def __on_message(self, body, channel, method, properties):
         try:
-            message = TransportMessage(body, method, properties, channel, None, None)
+            message = TransportMessage(body, method, properties, channel)
             self.__callback(message)
         except:
             LOGGER.exception("Subscriber failed, topic: '%s'." % self.__topic)
