@@ -42,7 +42,7 @@ class Config(object):
             'expiration': None,
             'max_concurrency': multiprocessing.cpu_count(),
             'prefetch_count': 10,
-            'serializer': None,
+            'serializer': 'json',
         }
     }
 
@@ -54,7 +54,7 @@ class Config(object):
             'expiration': None,
             'max_concurrency': multiprocessing.cpu_count(),
             'prefetch_count': 10,
-            'serializer': None,
+            'serializer': 'json',
         }
     }
 
@@ -64,9 +64,6 @@ class Config(object):
     #: Number of seconds between retries of reconnecting.
     #: Default is 3 seconds.
     SIMPLEBUS_RECOVERY_DELAY = 3
-
-    #: Default serializer used to serialize and deserialize the messages
-    SIMPLEBUS_DEFAULT_SERIALIZER = 'json'
 
     #: Serializers supported.
     SIMPLEBUS_SERIALIZERS = {

@@ -63,9 +63,7 @@ class Bus(object):
         """Starts the bus."""
 
         if len(self.config.SIMPLEBUS_ENDPOINTS) == 0:
-            raise RuntimeError('SimpleBus must have at least one endpoint')
-
-        self.__serializer_registry.default_serializer = self.config.SIMPLEBUS_DEFAULT_SERIALIZER
+            raise RuntimeError('SimpleBus should have at least one endpoint')
 
         for name, ser in self.config.SIMPLEBUS_SERIALIZERS.items():
             self.__serializer_registry.register(name, ser)

@@ -61,7 +61,6 @@ class PullerDispatcher(MessageDispatcher):
         try:
             message = self.__serializer_registry.deserialize(
                 transport_message.body,
-                transport_message.content_type,
                 transport_message.content_encoding,
                 self.__serializer)
 
@@ -99,7 +98,6 @@ class SubscriberDispatcher(MessageDispatcher):
         try:
             message = self.__serializer_registry.deserialize(
                 transport_message.body,
-                transport_message.content_type,
                 transport_message.content_encoding,
                 self.__serializer)
 

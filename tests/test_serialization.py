@@ -29,46 +29,47 @@ class TestSerialization(TestCase):
         self.registry.unregister_all()
 
     def test_default_serializer(self):
-        self.registry.default_serializer = 'raw'
         content_type, content_encoding, body = self.registry.serialize('hello')
 
         self.assertEqual('text/plain', content_type)
         self.assertEqual('utf-8', content_encoding)
         self.assertEqual(b'hello', body)
 
-        message = self.registry.deserialize(body, None, None)
+        message = self.registry.deserialize(body, None)
 
         self.assertEqual(b'hello', message)
 
     def test_serializer_not_found(self):
         self.assertRaises(SerializerNotFoundError, self.registry.serialize, 'hello', serializer='unknown')
-        self.assertRaises(SerializerNotFoundError, self.registry.deserialize, 'hello', None, None, serializer='unknown')
+        self.assertRaises(SerializerNotFoundError, self.registry.deserialize, 'hello', None, serializer='unknown')
 
-    def test_serializer_raw(self):
+    def test_serializer_without_serializer(self):
         # test bytes
-        content_type, content_encoding, body = self.registry.serialize(b'hello', serializer='raw')
+        content_type, content_encoding, body = self.registry.serialize(b'hello', serializer=None)
 
         self.assertEqual('application/data', content_type)
         self.assertEqual('binary', content_encoding)
         self.assertEqual(b'hello', body)
 
-        message = self.registry.deserialize(body, content_type, content_encoding)
+        message = self.registry.deserialize(body, content_encoding)
+        self.assertEqual(b'hello', message)
 
+        message = self.registry.deserialize(body, None)
         self.assertEqual(b'hello', message)
 
         # test text
-        content_type, content_encoding, body = self.registry.serialize('hello', serializer='raw')
+        content_type, content_encoding, body = self.registry.serialize('hello', serializer=None)
 
         self.assertEqual('text/plain', content_type)
         self.assertEqual('utf-8', content_encoding)
         self.assertEqual(b'hello', body)
 
-        message = self.registry.deserialize(body, content_type, content_encoding)
+        message = self.registry.deserialize(body, content_encoding)
 
         self.assertEqual('hello', message)
 
         # test invalid message
-        self.assertRaises(SerializationError, self.registry.serialize, dict(property=1), serializer='raw')
+        self.assertRaises(SerializationError, self.registry.serialize, dict(property=1), serializer=None)
 
     def test_serializer_json(self):
         self.registry.register('json', JsonSerializer())
@@ -78,10 +79,6 @@ class TestSerialization(TestCase):
         self.assertEqual('utf-8', content_encoding)
         self.assertEqual(b'"hello"', body)
 
-        message = self.registry.deserialize(body, content_type, content_encoding)
+        message = self.registry.deserialize(body, content_encoding, serializer='json')
 
         self.assertEqual('hello', message)
-
-    def test_deserialize_with_invalid_content_type(self):
-        self.assertRaises(SerializerNotFoundError, self.registry.deserialize, b'hello', None, None)
-        self.assertRaises(SerializerNotFoundError, self.registry.deserialize, b'hello', 'image/jpeg', None)
