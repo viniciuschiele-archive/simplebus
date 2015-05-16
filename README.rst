@@ -22,7 +22,7 @@ Soon... take a look at the examples to see how it works.
 
 Installation
 ===============
-You can install SimpleBus via Python Package Index (PyPI),::
+You can install SimpleBus via Python Package Index (PyPi_),::
 
     $ pip install simplebus
 
@@ -44,5 +44,7 @@ Please use the Issues_ for feature requests and troubleshooting usage.
    :target: https://github.com/viniciuschiele/simplebus/blob/master/LICENSE
 
 .. _amqp-storm: https://github.com/eandersson/amqp-storm
+
+.. _PyPi: https://pypi.python.org/pypi/simplebus
 
 .. _Issues: https://github.com/viniciuschiele/simplebus/issues
