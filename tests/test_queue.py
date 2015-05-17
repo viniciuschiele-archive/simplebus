@@ -20,7 +20,6 @@ import uuid
 from simplebus import transport_message
 from simplebus import MessageHandler
 from simplebus import pull
-from simplebus import SerializerNotFoundError
 from tests import create_bus
 from unittest import TestCase
 
@@ -70,10 +69,21 @@ class TestQueue(TestCase):
         cancellation = self.bus.pull(self.queue, handle)
         cancellation.cancel()
 
-    def test_message_properties(self):
+    def test_compression(self):
+        def handle(message):
+            self.assertEqual('application/x-gzip', transport_message.headers['x-compression'])
+            self.assertEqual('hello', message)
+            self.bus.loop.stop()
+
+        self.bus.pull(self.queue, handle)
+        self.bus.push(self.queue, 'hello', compression='gzip')
+        self.bus.loop.start()
+
+    def test_serializer(self):
         def handle(message):
             self.assertEqual('application/json', transport_message.content_type)
             self.assertEqual('utf-8', transport_message.content_encoding)
+            self.assertEqual('hello', message)
             self.bus.loop.stop()
 
         self.bus.pull(self.queue, handle)

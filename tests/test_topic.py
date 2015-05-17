@@ -16,6 +16,7 @@
 
 from simplebus import MessageHandler
 from simplebus import subscribe
+from simplebus import transport_message
 from tests import create_bus
 from unittest import TestCase
 
@@ -80,3 +81,24 @@ class TestTopic(TestCase):
         self.bus.publish(self.topic, 'hello')
         self.bus.loop.start()
         self.assertIsNot(self.thread_ids[0], self.thread_ids[1])
+
+    def test_compression(self):
+        def handle(message):
+            self.assertEqual('application/x-gzip', transport_message.headers['x-compression'])
+            self.assertEqual('hello', message)
+            self.bus.loop.stop()
+
+        self.bus.subscribe(self.topic, handle)
+        self.bus.publish(self.topic, 'hello', compression='gzip')
+        self.bus.loop.start()
+
+    def test_serializer(self):
+        def handle(message):
+            self.assertEqual('application/json', transport_message.content_type)
+            self.assertEqual('utf-8', transport_message.content_encoding)
+            self.assertEqual('hello', message)
+            self.bus.loop.stop()
+
+        self.bus.subscribe(self.topic, handle)
+        self.bus.publish(self.topic, 'hello')
+        self.bus.loop.start()
