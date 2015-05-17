@@ -85,7 +85,12 @@ class Transport(metaclass=ABCMeta):
 class TransportMessage(object):
     """An envelope used by SimpleBus to package messages for transmission."""
 
-    def __init__(self, app_id=None, message_id=None, content_type=None, content_encoding=None, body=None, expiration=None):
+    def __init__(self, app_id=None,
+                 message_id=None,
+                 content_type=None,
+                 content_encoding=None,
+                 body=None,
+                 expiration=None):
         self._app_id = app_id
         self._message_id = message_id
         self._content_type = content_type
@@ -93,6 +98,7 @@ class TransportMessage(object):
         self._body = body
         self._expiration = expiration
         self._retry_count = 0
+        self._headers = {}
 
     @property
     def app_id(self):
@@ -158,6 +164,16 @@ class TransportMessage(object):
     def retry_count(self):
         """Gets the number of retries."""
         return self._retry_count
+
+    @property
+    def headers(self):
+        """Gets the headers."""
+        return self._headers
+
+    @headers.setter
+    def headers(self, value):
+        """Sets the headers."""
+        self._headers = value
 
     def delete(self):
         """Deletes this message from the broker."""

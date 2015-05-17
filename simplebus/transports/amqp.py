@@ -178,8 +178,10 @@ class Transport(base.Transport):
         if message.expiration:
             properties['expiration'] = str(message.expiration)
 
+        properties['headers'] = message.headers.copy()
+
         if message.retry_count > 0:
-            properties['headers'] = {'x-retry-count': message.retry_count}
+            properties['headers']['x-retry-count'] = message.retry_count
 
         channel = self.__channels.acquire()
         try:
@@ -217,8 +219,11 @@ class TransportMessage(base.TransportMessage):
 
         headers = properties.get('headers')
         if not headers:
-            headers = {}
+            headers = self.headers
             properties['headers'] = headers
+
+        for k, v in headers.items():
+            self.headers[k.decode()] = v.decode() if isinstance(v, bytes) else v
 
         self._retry_count = headers.get(bytes('x-retry-count', 'utf-8')) or 0
 
