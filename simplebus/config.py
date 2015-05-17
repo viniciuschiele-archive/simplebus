@@ -58,6 +58,9 @@ class Config(object):
         }
     }
 
+    #: A sequence of modules to import when the bus starts.
+    SIMPLEBUS_IMPORTS = []
+
     #: If enabled the bus will try to reconnect if the connection goes down.
     SIMPLEBUS_RECOVERY = True
 

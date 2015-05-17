@@ -79,6 +79,8 @@ class Bus(object):
 
         self.__started = True
 
+        self.__load_imports()
+
         set_current_bus(self)
 
     def stop(self):
@@ -226,3 +228,12 @@ class Bus(object):
             raise RuntimeError("Endpoint '%s' not found" % endpoint)
 
         return transport
+
+    def __load_imports(self):
+        """Loads the modules configured in the configuration object."""
+
+        modules = self.config.SIMPLEBUS_IMPORTS
+        if not modules:
+            return
+        for module in modules:
+            __import__(module)
