@@ -42,16 +42,22 @@ class MessageDispatcher(metaclass=ABCMeta):
         pass
 
 
-class PullerDispatcher(MessageDispatcher):
+class DefaultDispatcher(MessageDispatcher):
     """
-    Dispatcher responsible for receiving messages from the queue and
-    send them to the message handler.
+    Dispatcher responsible for dispatching the message to the message handler.
     """
-    def __init__(self, queue, handler, serializer_registry, serializer):
-        self.__queue = queue
-        self.__handler = handler
-        self.__serializer_registry = serializer_registry
-        self.__serializer = serializer
+
+    def __init__(self,
+                 handler,
+                 serializer_registry,
+                 serializer,
+                 compression_registry,
+                 compression):
+        self._handler = handler
+        self._serializer_registry = serializer_registry
+        self._serializer = serializer
+        self._compression_registry = compression_registry
+        self._compression = compression
 
     def dispatch(self, transport_message):
         """Dispatches the message."""
@@ -59,12 +65,39 @@ class PullerDispatcher(MessageDispatcher):
         set_transport_message(transport_message)
 
         try:
-            message = self.__serializer_registry.deserialize(
+            compression = self._compression or transport_message.headers.get('x-compression')
+            if compression:
+                transport_message.body = self._compression_registry.decompress(transport_message.body, compression)
+
+            message = self._serializer_registry.deserialize(
                 transport_message.body,
                 transport_message.content_encoding,
-                self.__serializer)
+                self._serializer)
 
-            self.__handler.handle(message)
+            self._handler.handle(message)
+        finally:
+            set_transport_message(None)
+
+
+class PullerDispatcher(DefaultDispatcher):
+    """
+    Dispatcher responsible for dispatching the message to the message handler.
+    """
+    def __init__(self,
+                 queue,
+                 handler,
+                 serializer_registry,
+                 serializer,
+                 compression_registry,
+                 compression):
+        super().__init__(handler, serializer_registry, serializer, compression_registry, compression)
+        self.__queue = queue
+
+    def dispatch(self, transport_message):
+        """Dispatches the message."""
+
+        try:
+            super().dispatch(transport_message)
         except (NoRetryError, SerializerNotFoundError, SerializationError) as e:
             transport_message.dead_letter(str(e))
             LOGGER.exception(str(e))
@@ -75,38 +108,29 @@ class PullerDispatcher(MessageDispatcher):
         else:
             transport_message.delete()
 
-        set_transport_message(None)
 
-
-class SubscriberDispatcher(MessageDispatcher):
+class SubscriberDispatcher(DefaultDispatcher):
     """
-    Dispatcher responsible for receiving messages from the topic and
-    send them to the message handler.
+    Dispatcher responsible for dispatching the message to the message handler.
     """
 
-    def __init__(self, topic, handler, serializer_registry, serializer):
+    def __init__(self, topic,
+                 handler,
+                 serializer_registry,
+                 serializer,
+                 compression_registry,
+                 compression):
+        super().__init__(handler, serializer_registry, serializer, compression_registry, compression)
         self.__topic = topic
-        self.__handler = handler
-        self.__serializer_registry = serializer_registry
-        self.__serializer = serializer
 
     def dispatch(self, transport_message):
         """Dispatches the message."""
 
-        set_transport_message(transport_message)
-
         try:
-            message = self.__serializer_registry.deserialize(
-                transport_message.body,
-                transport_message.content_encoding,
-                self.__serializer)
-
-            self.__handler.handle(message)
+            super().dispatch(transport_message)
         except:
             LOGGER.exception(
                 "Message dispatch failed. message id: '%s', topic: '%s'." %
                 (transport_message.message_id, self.__topic))
-
-        transport_message.delete()
-
-        set_transport_message(None)
+        finally:
+            transport_message.delete()

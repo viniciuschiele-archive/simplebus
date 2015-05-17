@@ -17,6 +17,7 @@
 import copy
 import multiprocessing
 
+from simplebus.compression import GzipCompressor
 from simplebus.serialization import JsonSerializer
 from simplebus.utils import merge_dict
 
@@ -42,6 +43,7 @@ class Config(object):
             'expiration': None,
             'max_concurrency': multiprocessing.cpu_count(),
             'prefetch_count': 10,
+            'compression': None,
             'serializer': 'json',
         }
     }
@@ -54,6 +56,7 @@ class Config(object):
             'expiration': None,
             'max_concurrency': multiprocessing.cpu_count(),
             'prefetch_count': 10,
+            'compression': None,
             'serializer': 'json',
         }
     }
@@ -72,6 +75,11 @@ class Config(object):
 
     #: The maximum number of seconds to wait before retrying connect to the broker.
     SIMPLEBUS_RECOVERY_MAX_DELAY = 8
+
+    #: Compressions supported.
+    SIMPLEBUS_COMPRESSIONS = {
+        'gzip': GzipCompressor()
+    }
 
     #: Serializers supported.
     SIMPLEBUS_SERIALIZERS = {

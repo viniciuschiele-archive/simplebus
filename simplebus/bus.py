@@ -17,6 +17,7 @@
 from simplebus.config import Config
 from simplebus.cancellables import Cancellation
 from simplebus.cancellables import Subscription
+from simplebus.compression import CompressorRegistry
 from simplebus.dispatchers import PullerDispatcher
 from simplebus.dispatchers import SubscriberDispatcher
 from simplebus.handlers import CallbackHandler
@@ -41,6 +42,7 @@ class Bus(object):
         self.__queues_cached = {}
         self.__topics_cached = {}
         self.__loop = Loop()
+        self.__compressor_registry = CompressorRegistry()
         self.__serializer_registry = SerializerRegistry()
         self.config = Config()
 
@@ -64,8 +66,11 @@ class Bus(object):
         if len(self.config.SIMPLEBUS_ENDPOINTS) == 0:
             raise RuntimeError('SimpleBus should have at least one endpoint')
 
-        for name, ser in self.config.SIMPLEBUS_SERIALIZERS.items():
-            self.__serializer_registry.register(name, ser)
+        for name, compressor in self.config.SIMPLEBUS_COMPRESSIONS.items():
+            self.__compressor_registry.register(name, compressor)
+
+        for name, serializer in self.config.SIMPLEBUS_SERIALIZERS.items():
+            self.__serializer_registry.register(name, serializer)
 
         for key, endpoint in self.config.SIMPLEBUS_ENDPOINTS.items():
             transport = create_transport(
@@ -92,6 +97,7 @@ class Bus(object):
             transport.close()
         self.__transports.clear()
 
+        self.__compressor_registry.unregister_all()
         self.__serializer_registry.unregister_all()
 
         set_current_bus(None)
@@ -103,16 +109,9 @@ class Bus(object):
 
         options = self.__get_queue_options(queue, options)
 
-        content_type, content_encoding, body =\
-            self.__serializer_registry.serialize(message, options.get('serializer'))
+        transport_message = self.__create_transport_message(message, **options)
 
         transport = self.__get_transport(options.get('endpoint'))
-        transport_message = TransportMessage(self.__app_id,
-                                             create_random_id(),
-                                             content_type,
-                                             content_encoding,
-                                             body,
-                                             options.get('expiration'))
         transport.push(queue, transport_message, options)
 
     def pull(self, queue, callback, **options):
@@ -123,7 +122,9 @@ class Bus(object):
         id = create_random_id()
         options = self.__get_queue_options(queue, options)
         handler = self.__get_handler(callback)
-        dispatcher = PullerDispatcher(queue, handler, self.__serializer_registry, options.get('serializer'))
+        dispatcher = PullerDispatcher(queue, handler,
+                                      self.__serializer_registry, options.get('serializer'),
+                                      self.__compressor_registry, options.get('compression'))
         transport = self.__get_transport(options.get('endpoint'))
         transport.pull(id, queue, dispatcher, options)
         return Cancellation(id, transport)
@@ -135,16 +136,9 @@ class Bus(object):
 
         options = self.__get_topic_options(topic, options)
 
-        content_type, content_encoding, body =\
-            self.__serializer_registry.serialize(message, options.get('serializer'))
+        transport_message = self.__create_transport_message(message, **options)
 
         transport = self.__get_transport(options.get('endpoint'))
-        transport_message = TransportMessage(self.__app_id,
-                                             create_random_id(),
-                                             content_type,
-                                             content_encoding,
-                                             body,
-                                             options.get('expiration'))
         transport.publish(topic, transport_message, options)
 
     def subscribe(self, topic, callback, **options):
@@ -155,10 +149,31 @@ class Bus(object):
         id = create_random_id()
         options = self.__get_topic_options(topic, options)
         handler = self.__get_handler(callback)
-        dispatcher = SubscriberDispatcher(topic, handler, self.__serializer_registry, options.get('serializer'))
+        dispatcher = SubscriberDispatcher(topic, handler,
+                                          self.__serializer_registry, options.get('serializer'),
+                                          self.__compressor_registry, options.get('compression'))
         transport = self.__get_transport(options.get('endpoint'))
         transport.subscribe(id, topic, dispatcher, options)
         return Subscription(id, transport)
+
+    def __create_transport_message(self, message, **options):
+        content_type, content_encoding, body =\
+            self.__serializer_registry.serialize(message, options.get('serializer'))
+
+        transport_message = TransportMessage(self.__app_id,
+                                             create_random_id(),
+                                             content_type,
+                                             content_encoding,
+                                             body,
+                                             options.get('expiration'))
+
+        compression = options.get('compression')
+        if compression:
+            compression, body = self.__compressor_registry.compress(body, compression)
+            transport_message.body = body
+            transport_message.headers['x-compression'] = compression
+
+        return transport_message
 
     def __ensure_started(self):
         """If the bus is not started it starts."""

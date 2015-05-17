@@ -21,10 +21,20 @@ class NoRetryError(Exception):
 
 
 class SerializationError(Exception):
-    """Serialize or Deserialize has failed."""
+    """Serialize or deserialize has failed."""
     pass
 
 
 class SerializerNotFoundError(Exception):
     """Serializer not found."""
+    pass
+
+
+class CompressionError(Exception):
+    """Compress or decompress has failed."""
+    pass
+
+
+class CompressionNotFoundError(Exception):
+    """Compression not found."""
     pass
