@@ -14,6 +14,7 @@ Features
 - Concurrent threads receiving messages from a specified queue.
 - Dead letter, messages that fail all retires are send to an dead letter queue.
 - Custom serialization, implemented json and msgpack.
+- Message compression.
 - ... more coming
 
 Documentation
