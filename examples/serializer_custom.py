@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from simplebus import Bus
+from simplebus.serialization import registry
 from simplebus.serialization import Serializer
 
 
@@ -25,24 +26,18 @@ class CustomSerializer(Serializer):
     def content_encoding(self):
         return 'utf-8'
 
-    def serialize(self, message):
+    def dumps(self, body):
         # your magic here
         pass
 
-    def deserialize(self, buffer):
+    def loads(self, body):
         # your magic here
         pass
-
-
-class Config(object):
-    SIMPLEBUS_SERIALIZERS = {
-        'custom': CustomSerializer()
-    }
-
 
 if __name__ == '__main__':
+    registry.register('custom', CustomSerializer())
+
     bus = Bus(app_id='custom_serializer')
-    bus.config.from_object(Config())
 
     message = {
         'property1': 'value1',
