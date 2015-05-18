@@ -22,7 +22,7 @@ from simplebus.dispatchers import PullerDispatcher
 from simplebus.dispatchers import SubscriberDispatcher
 from simplebus.handlers import CallbackHandler
 from simplebus.handlers import MessageHandler
-from simplebus.serialization import SerializerRegistry
+from simplebus.serialization import dumps
 from simplebus.state import set_current_bus
 from simplebus.transports import create_transport
 from simplebus.transports.base import TransportMessage
@@ -43,7 +43,6 @@ class Bus(object):
         self.__topics_cached = {}
         self.__loop = Loop()
         self.__compressor_registry = CompressorRegistry()
-        self.__serializer_registry = SerializerRegistry()
         self.config = Config()
 
     @property
@@ -68,9 +67,6 @@ class Bus(object):
 
         for name, compressor in self.config.SIMPLEBUS_COMPRESSIONS.items():
             self.__compressor_registry.register(name, compressor)
-
-        for name, serializer in self.config.SIMPLEBUS_SERIALIZERS.items():
-            self.__serializer_registry.register(name, serializer)
 
         for key, endpoint in self.config.SIMPLEBUS_ENDPOINTS.items():
             transport = create_transport(
@@ -98,7 +94,6 @@ class Bus(object):
         self.__transports.clear()
 
         self.__compressor_registry.unregister_all()
-        self.__serializer_registry.unregister_all()
 
         set_current_bus(None)
 
@@ -122,8 +117,7 @@ class Bus(object):
         id = create_random_id()
         options = self.__get_queue_options(queue, options)
         handler = self.__get_handler(callback)
-        dispatcher = PullerDispatcher(queue, handler,
-                                      self.__serializer_registry, options.get('serializer'),
+        dispatcher = PullerDispatcher(queue, handler, options.get('serializer'),
                                       self.__compressor_registry, options.get('compression'))
         transport = self.__get_transport(options.get('endpoint'))
         transport.pull(id, queue, dispatcher, options)
@@ -149,16 +143,14 @@ class Bus(object):
         id = create_random_id()
         options = self.__get_topic_options(topic, options)
         handler = self.__get_handler(callback)
-        dispatcher = SubscriberDispatcher(topic, handler,
-                                          self.__serializer_registry, options.get('serializer'),
+        dispatcher = SubscriberDispatcher(topic, handler, options.get('serializer'),
                                           self.__compressor_registry, options.get('compression'))
         transport = self.__get_transport(options.get('endpoint'))
         transport.subscribe(id, topic, dispatcher, options)
         return Subscription(id, transport)
 
     def __create_transport_message(self, message, **options):
-        content_type, content_encoding, body =\
-            self.__serializer_registry.serialize(message, options.get('serializer'))
+        content_type, content_encoding, body = dumps(message, options.get('serializer'))
 
         transport_message = TransportMessage(self.__app_id,
                                              create_random_id(),

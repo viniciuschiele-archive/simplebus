@@ -22,9 +22,12 @@ import logging
 
 from abc import ABCMeta
 from abc import abstractmethod
+from simplebus.exceptions import CompressionError
+from simplebus.exceptions import CompressionNotFoundError
 from simplebus.exceptions import NoRetryError
 from simplebus.exceptions import SerializationError
 from simplebus.exceptions import SerializerNotFoundError
+from simplebus.serialization import loads
 from simplebus.state import set_transport_message
 
 
@@ -34,7 +37,7 @@ LOGGER = logging.getLogger(__name__)
 class MessageDispatcher(metaclass=ABCMeta):
     """Base class for the dispatchers."""
     def __call__(self, *args, **kwargs):
-        self.dispatch(*args)
+        self.dispatch(*args, **kwargs)
 
     @abstractmethod
     def dispatch(self, message):
@@ -49,12 +52,10 @@ class DefaultDispatcher(MessageDispatcher):
 
     def __init__(self,
                  handler,
-                 serializer_registry,
                  serializer,
                  compression_registry,
                  compression):
         self._handler = handler
-        self._serializer_registry = serializer_registry
         self._serializer = serializer
         self._compression_registry = compression_registry
         self._compression = compression
@@ -69,8 +70,9 @@ class DefaultDispatcher(MessageDispatcher):
             if compression:
                 transport_message.body = self._compression_registry.decompress(transport_message.body, compression)
 
-            message = self._serializer_registry.deserialize(
+            message = loads(
                 transport_message.body,
+                transport_message.content_type,
                 transport_message.content_encoding,
                 self._serializer)
 
@@ -86,11 +88,10 @@ class PullerDispatcher(DefaultDispatcher):
     def __init__(self,
                  queue,
                  handler,
-                 serializer_registry,
                  serializer,
                  compression_registry,
                  compression):
-        super().__init__(handler, serializer_registry, serializer, compression_registry, compression)
+        super().__init__(handler, serializer, compression_registry, compression)
         self.__queue = queue
 
     def dispatch(self, transport_message):
@@ -98,7 +99,8 @@ class PullerDispatcher(DefaultDispatcher):
 
         try:
             super().dispatch(transport_message)
-        except (NoRetryError, SerializerNotFoundError, SerializationError) as e:
+        except (CompressionError, CompressionNotFoundError,
+                NoRetryError, SerializerNotFoundError, SerializationError) as e:
             transport_message.dead_letter(str(e))
             LOGGER.exception(str(e))
         except:
@@ -116,11 +118,10 @@ class SubscriberDispatcher(DefaultDispatcher):
 
     def __init__(self, topic,
                  handler,
-                 serializer_registry,
                  serializer,
                  compression_registry,
                  compression):
-        super().__init__(handler, serializer_registry, serializer, compression_registry, compression)
+        super().__init__(handler, serializer, compression_registry, compression)
         self.__topic = topic
 
     def dispatch(self, transport_message):

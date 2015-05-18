@@ -81,11 +81,6 @@ class Config(object):
         'gzip': GzipCompressor()
     }
 
-    #: Serializers supported.
-    SIMPLEBUS_SERIALIZERS = {
-        'json': JsonSerializer()
-    }
-
     def from_object(self, obj):
         """Load values from an object."""
 

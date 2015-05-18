@@ -23,8 +23,8 @@ from simplebus.exceptions import SerializerNotFoundError
 
 try:
     import simplejson as json
-except ImportError:  # pragma: no cover
-    import json  # noqa
+except ImportError:
+    import json
 
 try:
     import msgpack
@@ -39,12 +39,12 @@ class SerializerRegistry(object):
         self.__serializers = {}
 
     def register(self, name, serializer):
-        """Register a new serializer."""
+        """Registers a new serializer."""
         self.__serializers[name] = serializer
 
-    def unregister_all(self):
-        """Unregister all serializers."""
-        self.__serializers.clear()
+    def unregister(self, name):
+        """Unregister the specified serializer."""
+        self.__serializers.pop(name)
 
     def get(self, name):
         """Gets the serializer by the name."""
@@ -54,28 +54,72 @@ class SerializerRegistry(object):
             return serializer
         raise SerializerNotFoundError("Serializer '%s' not found." % name)
 
-    def serialize(self, message, serializer=None):
-        """Serializes the specified message using the specified serializer."""
+    def find(self, content_type):
+        """Gets the serializer by the content type."""
+
+        for serializer in self.__serializers.values():
+            if content_type == serializer.content_type:
+                return serializer
+        return None
+
+    def dumps(self, body, serializer=None):
+        """Serializes the specified body using the specified serializer."""
+
+        if serializer == 'raw':
+            return self.__raw_dumps(body)
 
         if serializer:
             ser = self.get(serializer)
-            return ser.content_type, ser.content_encoding, ser.serialize(message)
+            return ser.content_type, ser.content_encoding, ser.dumps(body)
 
-        if isinstance(message, bytes):
-            return 'application/data', 'binary', message
-        if isinstance(message, str):
-            return 'text/plain', 'utf-8', message.encode()
+        if isinstance(body, str):
+            return 'text/plain', 'utf-8', body.encode()
 
-        raise SerializationError('Message should be bytes or str to be serialized.')
+        if isinstance(body, bytes):
+            return 'application/octet-stream', 'binary', body
 
-    def deserialize(self, body, content_encoding, serializer=None):
-        """Deserializes the specified message using the specified serializer."""
+        raise SerializationError('No serializer specified to serialize.')
+
+    def loads(self, body, content_type, content_encoding, serializer=None):
+        """Deserializes the specified body using the specified serializer."""
+
+        if content_type:
+            ser = self.find(content_type)
+            if ser:
+                return ser.loads(body)
+
+        if content_type == 'text/plain':
+            return codecs.decode(body, content_encoding or 'utf-8')
+
+        if content_type == 'application/octet-stream':
+            return body
+
+        if serializer == 'raw':
+            return self.__raw_loads(body, content_encoding)
 
         if serializer:
-            return self.get(serializer).deserialize(body)
+            return self.get(serializer).loads(body)
 
+        raise SerializationError('No serializer specified to deserialize.')
+
+    @staticmethod
+    def __raw_dumps(body):
+        """Serializes the body as str or bytes."""
+
+        if isinstance(body, bytes):
+            return 'application/data', 'binary', body
+
+        if isinstance(body, str):
+            return 'application/data', 'utf-8', body.encode()
+
+        raise SerializationError('Serializer raw only serializes str or bytes.')
+
+    @staticmethod
+    def __raw_loads(body, content_encoding):
+        """Deserializes the body using the encoding."""
         if not content_encoding or content_encoding == 'binary':
             return body
+
         return codecs.decode(body, content_encoding)
 
 
@@ -95,13 +139,13 @@ class Serializer(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def serialize(self, value):
-        """Serializes the specified value into bytes."""
+    def dumps(self, body):
+        """Serializes the specified body into bytes."""
         pass
 
     @abstractmethod
-    def deserialize(self, buffer):
-        """Deserializes the specified bytes into a object."""
+    def loads(self, body):
+        """Deserializes the specified body into a object."""
         pass
 
 
@@ -118,19 +162,19 @@ class JsonSerializer(Serializer):
         """Gets the content encoding used to serialize."""
         return 'utf-8'
 
-    def serialize(self, message):
-        """Serializes the specified value into bytes."""
+    def dumps(self, body):
+        """Serializes the specified body into bytes."""
 
         try:
-            return json.dumps(message).encode(self.content_encoding)
+            return json.dumps(body).encode(self.content_encoding)
         except Exception as e:
             raise SerializationError(str(e))
 
-    def deserialize(self, buffer):
-        """Deserializes the specified bytes into a object."""
+    def loads(self, body):
+        """Deserializes the specified body into a object."""
 
         try:
-            return json.loads(buffer.decode(self.content_encoding))
+            return json.loads(body.decode(self.content_encoding))
         except Exception as e:
             raise SerializationError(str(e))
 
@@ -152,18 +196,35 @@ class MsgPackSerializer(Serializer):
         """Gets the content encoding used to serialize."""
         return 'binary'
 
-    def serialize(self, message):
-        """Serializes the specified value into bytes."""
+    def dumps(self, body):
+        """Serializes the specified body into bytes."""
 
         try:
-            return msgpack.packb(message)
+            return msgpack.packb(body)
         except Exception as e:
             raise SerializationError(str(e))
 
-    def deserialize(self, buffer):
-        """Deserializes the specified bytes into a object."""
+    def loads(self, body):
+        """Deserializes the specified body into a object."""
 
         try:
-            return msgpack.unpackb(buffer, encoding='utf-8')
+            return msgpack.unpackb(body, encoding='utf-8')
         except Exception as e:
             raise SerializationError(str(e))
+
+
+registry = SerializerRegistry()
+registry.register('json', JsonSerializer())
+
+if msgpack:
+    registry.register('msgpack', MsgPackSerializer())
+
+
+def dumps(body, serializer=None):
+    """Serializes the specified body using the specified serializer."""
+    return registry.dumps(body, serializer)
+
+
+def loads(body, content_type, content_encoding, serializer=None):
+    """Deserializes the specified body using the specified serializer."""
+    return registry.loads(body, content_type, content_encoding, serializer)
