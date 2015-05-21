@@ -17,7 +17,7 @@
 from simplebus.config import Config
 from simplebus.cancellables import Cancellation
 from simplebus.cancellables import Subscription
-from simplebus.compression import CompressorRegistry
+from simplebus.compression import compress
 from simplebus.dispatchers import PullerDispatcher
 from simplebus.dispatchers import SubscriberDispatcher
 from simplebus.handlers import CallbackHandler
@@ -42,7 +42,6 @@ class Bus(object):
         self.__queues_cached = {}
         self.__topics_cached = {}
         self.__loop = Loop()
-        self.__compressor_registry = CompressorRegistry()
         self.config = Config()
 
     @property
@@ -64,9 +63,6 @@ class Bus(object):
 
         if len(self.config.SIMPLEBUS_ENDPOINTS) == 0:
             raise RuntimeError('SimpleBus should have at least one endpoint')
-
-        for name, compressor in self.config.SIMPLEBUS_COMPRESSIONS.items():
-            self.__compressor_registry.register(name, compressor)
 
         for key, endpoint in self.config.SIMPLEBUS_ENDPOINTS.items():
             transport = create_transport(
@@ -93,8 +89,6 @@ class Bus(object):
             transport.close()
         self.__transports.clear()
 
-        self.__compressor_registry.unregister_all()
-
         set_current_bus(None)
 
     def push(self, queue, message, **options):
@@ -117,8 +111,7 @@ class Bus(object):
         id = create_random_id()
         options = self.__get_queue_options(queue, options)
         handler = self.__get_handler(callback)
-        dispatcher = PullerDispatcher(queue, handler, options.get('serializer'),
-                                      self.__compressor_registry, options.get('compression'))
+        dispatcher = PullerDispatcher(queue, handler, options.get('serializer'), options.get('compression'))
         transport = self.__get_transport(options.get('endpoint'))
         transport.pull(id, queue, dispatcher, options)
         return Cancellation(id, transport)
@@ -143,8 +136,7 @@ class Bus(object):
         id = create_random_id()
         options = self.__get_topic_options(topic, options)
         handler = self.__get_handler(callback)
-        dispatcher = SubscriberDispatcher(topic, handler, options.get('serializer'),
-                                          self.__compressor_registry, options.get('compression'))
+        dispatcher = SubscriberDispatcher(topic, handler, options.get('serializer'), options.get('compression'))
         transport = self.__get_transport(options.get('endpoint'))
         transport.subscribe(id, topic, dispatcher, options)
         return Subscription(id, transport)
@@ -161,9 +153,8 @@ class Bus(object):
 
         compression = options.get('compression')
         if compression:
-            compression, body = self.__compressor_registry.compress(body, compression)
-            transport_message.body = body
-            transport_message.headers['x-compression'] = compression
+            transport_message.headers['x-compression'], transport_message.body = \
+                compress(body, compression)
 
         return transport_message
 

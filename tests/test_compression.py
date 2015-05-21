@@ -26,9 +26,6 @@ class TestCompression(TestCase):
         self.registry = CompressorRegistry()
         self.registry.register('gzip', GzipCompressor())
 
-    def tearDown(self):
-        self.registry.unregister_all()
-
     def test_invalid_body(self):
         self.assertRaises(CompressionError, self.registry.compress, dict(property=1), 'gzip')
         self.assertRaises(CompressionError, self.registry.decompress, dict(property=1), None, 'gzip')
@@ -36,8 +33,8 @@ class TestCompression(TestCase):
     def test_gzip_compression(self):
         content_type, body = self.registry.compress(b'hello', 'gzip')
         self.assertEqual('application/x-gzip', content_type)
-        body = self.registry.decompress(body, content_type)
-        self.assertEqual(b'hello', body)
+        self.assertEqual(b'hello', self.registry.decompress(body, content_type))
+        self.assertEqual(b'hello', self.registry.decompress(body, None, 'gzip'))
 
     def test_not_found(self):
         self.assertRaises(CompressionNotFoundError, self.registry.compress, 'hello', 'unknown')

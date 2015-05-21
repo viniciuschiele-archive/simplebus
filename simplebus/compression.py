@@ -29,12 +29,12 @@ class CompressorRegistry(object):
         self.__compressors = {}
 
     def register(self, name, compressor):
-        """Register a new serializer."""
+        """Register a new compressor."""
         self.__compressors[name] = compressor
 
-    def unregister_all(self):
-        """Unregister all serializers."""
-        self.__compressors.clear()
+    def unregister(self, name):
+        """Unregister the specified compressor."""
+        self.__compressors.pop(name)
 
     def get(self, name):
         """Gets the compressor by the name."""
@@ -53,13 +53,13 @@ class CompressorRegistry(object):
         raise CompressionNotFoundError("Compression '%s' not found." % content_type)
 
     def compress(self, body, compression):
-        """Serializes the specified message using the specified serializer."""
+        """Compress the specified body using the specified compression."""
 
         compressor = self.get(compression)
         return compressor.content_type, compressor.compress(body)
 
     def decompress(self, body, content_type, compression=None):
-        """Deserializes the specified message using the specified serializer."""
+        """Decompress the specified body using the specified compression."""
 
         if compression:
             return self.get(compression).decompress(body)
@@ -92,7 +92,7 @@ class GzipCompressor(Compressor):
 
     @property
     def content_type(self):
-        """Gets the content type used to serialize."""
+        """Gets the content type used to compress."""
         return 'application/x-gzip'
 
     def compress(self, body):
@@ -110,3 +110,17 @@ class GzipCompressor(Compressor):
             return zlib.decompress(body)
         except Exception as e:
             raise CompressionError(e)
+
+
+registry = CompressorRegistry()
+registry.register('gzip', GzipCompressor())
+
+
+def compress(body, compression):
+    """Compress the specified body using the specified compression."""
+    return registry.compress(body, compression)
+
+
+def decompress(body, content_type, compression=None):
+    """Decompress the specified body using the specified compression."""
+    return registry.decompress(body, content_type, compression)

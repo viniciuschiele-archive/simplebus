@@ -76,11 +76,6 @@ class Config(object):
     #: The maximum number of seconds to wait before retrying connect to the broker.
     SIMPLEBUS_RECOVERY_MAX_DELAY = 8
 
-    #: Compressions supported.
-    SIMPLEBUS_COMPRESSIONS = {
-        'gzip': GzipCompressor()
-    }
-
     def from_object(self, obj):
         """Load values from an object."""
 

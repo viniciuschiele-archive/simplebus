@@ -22,6 +22,7 @@ import logging
 
 from abc import ABCMeta
 from abc import abstractmethod
+from simplebus.compression import decompress
 from simplebus.exceptions import CompressionError
 from simplebus.exceptions import CompressionNotFoundError
 from simplebus.exceptions import NoRetryError
@@ -53,11 +54,9 @@ class DefaultDispatcher(MessageDispatcher):
     def __init__(self,
                  handler,
                  serializer,
-                 compression_registry,
                  compression):
         self._handler = handler
         self._serializer = serializer
-        self._compression_registry = compression_registry
         self._compression = compression
 
     def dispatch(self, transport_message):
@@ -68,7 +67,7 @@ class DefaultDispatcher(MessageDispatcher):
         try:
             compression = self._compression or transport_message.headers.get('x-compression')
             if compression:
-                transport_message.body = self._compression_registry.decompress(transport_message.body, compression)
+                transport_message.body = decompress(transport_message.body, compression)
 
             message = loads(
                 transport_message.body,
@@ -89,9 +88,8 @@ class PullerDispatcher(DefaultDispatcher):
                  queue,
                  handler,
                  serializer,
-                 compression_registry,
                  compression):
-        super().__init__(handler, serializer, compression_registry, compression)
+        super().__init__(handler, serializer, compression)
         self.__queue = queue
 
     def dispatch(self, transport_message):
@@ -119,9 +117,8 @@ class SubscriberDispatcher(DefaultDispatcher):
     def __init__(self, topic,
                  handler,
                  serializer,
-                 compression_registry,
                  compression):
-        super().__init__(handler, serializer, compression_registry, compression)
+        super().__init__(handler, serializer, compression)
         self.__topic = topic
 
     def dispatch(self, transport_message):
