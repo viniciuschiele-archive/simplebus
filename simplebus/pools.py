@@ -47,10 +47,12 @@ class ResourcePool(metaclass=ABCMeta):
 
     @property
     def max_size(self):
+        """Gets the maximum number of resources."""
         return self.__max_size
 
     @property
     def min_size(self):
+        """Gets the minimum number of resources."""
         return self.__min_size
 
     def acquire(self):
@@ -85,7 +87,7 @@ class ResourcePool(metaclass=ABCMeta):
                 self._close_resource(resource)
 
     def close(self):
-        """Closes and removes all resources in the pool (also those in use)."""
+        """Closes and removes all resources in the pool."""
 
         self.__closed = True
 
@@ -99,7 +101,9 @@ class ResourcePool(metaclass=ABCMeta):
         self.__size = 0
 
     def __inc_size(self):
-        if self.__max_size is None or self.__max_size == -1:
+        """Increments the number of resources alive."""
+
+        if self.__max_size == -1:
             self.__size += 1
             return True
         with self.__size_lock:
@@ -110,6 +114,8 @@ class ResourcePool(metaclass=ABCMeta):
                 return False
 
     def __dec_size(self):
+        """Decrements the number of resources alive."""
+
         if self.__max_size == -1:
             self.__size -= 1
             return True
