@@ -8,14 +8,14 @@ SimpleBus is still under heavy development so next versions might break compatib
 
 Features
 ===============
-- Auto recovery in case of connection fall.
-- Multiple transports. (only amqp implemented so far)
-    - Channel pooling for amqp transport
+- Auto recovery whether connection is dropped.
+- Multiple transports, amqp implemented so far.
+- Channel pooling for amqp transport.
 - Retry logic for all messages received, it supports delay between retries.
 - Concurrent threads receiving messages from a specified queue.
 - Dead letter, messages that fail all retires are send to an dead letter queue.
-- Custom serialization, implemented json and msgpack.
-- Message compression.
+- Custom serialization, json and msgpack implemented so far.
+- Message compression, gzip implemented so far.
 - ... more coming
 
 Documentation
