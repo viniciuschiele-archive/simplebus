@@ -24,32 +24,46 @@ class TestResourcePool(TestCase):
         for i in range(100):
             pool.acquire()
 
-    def test_limit(self):
-        pool = self.StringPool(2)
+    def test_min_size(self):
+        pool = self.StringPool(min_size=2)
+        self.assertEqual('string1', pool.acquire())
+        self.assertEqual('string2', pool.acquire())
+
+        pool.release('string1')
+
+        self.assertEqual('string1', pool.acquire())
+        self.assertEqual('string3', pool.acquire())
+
+        pool.release('string1')
+
+        self.assertEqual('string4', pool.acquire())
+
+    def test_max_size(self):
+        pool = self.StringPool(min_size=0, max_size=2)
         self.assertEqual('string1', pool.acquire())
         self.assertEqual('string2', pool.acquire())
         self.assertRaises(RuntimeError, pool.acquire)
 
         pool.release('string1')
 
-        self.assertEqual('string1', pool.acquire())
+        self.assertEqual('string3', pool.acquire())
         self.assertRaises(RuntimeError, pool.acquire)
 
         pool.release('string2')
         pool.release('string1')
 
-        self.assertEqual('string1', pool.acquire())
-        self.assertEqual('string2', pool.acquire())
+        self.assertEqual('string4', pool.acquire())
+        self.assertEqual('string5', pool.acquire())
 
     def test_validate(self):
-        pool = self.StringPool(1, invalidate_all=True)
+        pool = self.StringPool(max_size=1, invalidate_all=True)
         self.assertEqual('string1', pool.acquire())
         pool.release('string1')
         self.assertEqual('string2', pool.acquire())
 
     class StringPool(ResourcePool):
-        def __init__(self, limit=None, invalidate_all=False):
-            super().__init__(limit)
+        def __init__(self, min_size=None, max_size=None, invalidate_all=False):
+            super().__init__(min_size or 0, max_size)
             self.__count = 0
             self.__invalidate_all = invalidate_all
 

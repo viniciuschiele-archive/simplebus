@@ -14,6 +14,8 @@
 
 """Base classes to implement a pool of resources."""
 
+import threading
+
 from abc import ABCMeta
 from abc import abstractmethod
 from queue import Empty
@@ -23,11 +25,33 @@ from queue import LifoQueue
 class ResourcePool(metaclass=ABCMeta):
     """Base class that provides a pool of resources."""
 
-    def __init__(self, limit=None):
-        self.limit = limit
+    def __init__(self, min_size, max_size=None):
+        if not isinstance(min_size, int):
+            raise TypeError('min_size should be int.')
+
+        if max_size and not isinstance(max_size, int):
+            raise TypeError('max_size should be int.')
+
+        if min_size < 0:
+            raise ValueError('min_size should be greater than 0.')
+
+        if max_size and max_size < min_size:
+            raise ValueError('max_size should be greater or equal to min_size.')
+
+        self.__min_size = min_size
+        self.__max_size = max_size or -1
+        self.__size = 0
+        self.__size_lock = threading.Lock()
         self.__closed = False
-        self.__resources_in = LifoQueue()
-        self.__resources_out = set()
+        self.__pool = LifoQueue()
+
+    @property
+    def max_size(self):
+        return self.__max_size
+
+    @property
+    def min_size(self):
+        return self.__min_size
 
     def acquire(self):
         """Acquires a resource."""
@@ -35,63 +59,63 @@ class ResourcePool(metaclass=ABCMeta):
         if self.__closed:
             raise RuntimeError('Acquire on closed pool')
 
-        if not self.limit:
-            return self._create_resource()
-
-        resource = None
-
         try:
-            while True:
-                resource = self.__resources_in.get_nowait()
-                if self._validate_resource(resource):
-                    break
+            return self.__pool.get_nowait()
         except Empty:
-            resource = None
-
-        if not resource:
-            if self.limit and len(self.__resources_out) >= self.limit:
+            if not self.__inc_size():
                 raise RuntimeError('Limit of channels exceeded.')
-            resource = self._create_resource()
 
-        self.__resources_out.add(resource)
-        return resource
+            try:
+                return self._create_resource()
+            except:
+                self.__dec_size()
+                raise
 
     def release(self, resource):
         """Release resource so it can be used by another thread."""
 
-        if self.limit:
-            if self._validate_resource(resource):
-                self.__resources_in.put_nowait(resource)
-            else:
-                self._close_resource(resource)
-            self.__resources_out.discard(resource)
-        else:
+        if self.__size > self.__min_size:
+            self.__dec_size()
             self._close_resource(resource)
+        else:
+            if self._validate_resource(resource):
+                self.__pool.put_nowait(resource)
+            else:
+                self.__dec_size()
+                self._close_resource(resource)
 
     def close(self):
-        """Close and remove all resources in the pool (also those in use)."""
+        """Closes and removes all resources in the pool (also those in use)."""
 
         self.__closed = True
 
         while 1:
             try:
-                resource = self.__resources_out.pop()
-            except KeyError:
-                break
-            try:
+                resource = self.__pool.get_nowait()
                 self._close_resource(resource)
-            except AttributeError:
-                pass
+            except Empty:
+                break
 
-        while 1:
-            try:
-                resource = self.__resources_in.queue.pop()
-            except IndexError:
-                break
-            try:
-                self._close_resource(resource)
-            except AttributeError:
-                pass
+        self.__size = 0
+
+    def __inc_size(self):
+        if self.__max_size is None or self.__max_size == -1:
+            self.__size += 1
+            return True
+        with self.__size_lock:
+            if self.__size < self.__max_size:
+                self.__size += 1
+                return True
+            else:
+                return False
+
+    def __dec_size(self):
+        if self.__max_size == -1:
+            self.__size -= 1
+            return True
+        with self.__size_lock:
+            self.__size -= 1
+            return True
 
     @abstractmethod
     def _create_resource(self):

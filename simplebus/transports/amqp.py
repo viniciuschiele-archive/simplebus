@@ -41,13 +41,16 @@ class Transport(base.Transport):
         self.__connection = None
         self.__connection_lock = Lock()
         self.__channels = None
-        self.__channel_limit = self.__parse_channel_limit(url)
+        self.__min_channels = 5
+        self.__max_channels = 20
         self.__close_lock = Lock()
         self.__closed_by_user = None
         self.__url = url
         self.__pullers = {}
         self.__subscribers = {}
         self.closed = EventHandler()
+
+        self.__load_channel_limits(url)
 
     @property
     def is_open(self):
@@ -133,7 +136,7 @@ class Transport(base.Transport):
             self.__connection = amqpstorm.UriConnection(self.__url)
             self.__connection.open()
             self.__closed_by_user = None
-            self.__channels = ChannelPool(self.__channel_limit, self.__connection)
+            self.__channels = ChannelPool(self.__min_channels, self.__max_channels, self.__connection)
         finally:
             self.__connection_lock.release()
 
@@ -154,17 +157,17 @@ class Transport(base.Transport):
             finally:
                 self.__close_lock.release()
 
-    @staticmethod
-    def __parse_channel_limit(url):
+    def __load_channel_limits(self, url):
         uri = parse.urlparse(url)
         params = parse.parse_qs(uri.query)
 
-        channel_limit = params.get('channel_limit')
+        min_channels = params.get('min_channels')
+        if min_channels:
+            self.__min_channels = int(min_channels[0])
 
-        if not channel_limit:
-            return None
-
-        return int(channel_limit[0])
+        max_channels = params.get('max_channels')
+        if max_channels:
+            self.__max_channels = int(max_channels[0])
 
     def __send_message(self, exchange, routing_key, message, mandatory):
         properties = {
@@ -283,8 +286,8 @@ class TransportMessage(base.TransportMessage):
 class ChannelPool(ResourcePool):
     """Provides a pool of channels."""
 
-    def __init__(self, max_size, connection):
-        super().__init__(max_size)
+    def __init__(self, min_size, max_size, connection):
+        super().__init__(min_size, max_size)
         self.__connection = connection
 
     def _create_resource(self):
