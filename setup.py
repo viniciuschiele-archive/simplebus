@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='simplebus',
-    version='0.9.0',
+    version='0.9.5',
     packages=[
         'simplebus',
         'simplebus.transports'],
@@ -12,7 +12,8 @@ setup(
     author_email='vinicius.chiele@gmail.com',
     description='A simple message bus for python 3',
     keywords=['simplebus', 'messagebus', 'message bus',
-              'messaging', 'queue', 'topic', 'pubsub'],
+              'messaging', 'queue', 'topic', 'pubsub',
+              'amqp', 'rabbit', 'rabbitmq'],
     classifiers=[
           'Development Status :: 5 - Production/Stable',
           'Intended Audience :: Developers',
