@@ -10,6 +10,7 @@ Features
 ===============
 - Auto recovery in case of connection fall.
 - Multiple transports. (only amqp implemented so far)
+    - Channel pooling for amqp transport
 - Retry logic for all messages received, it supports delay between retries.
 - Concurrent threads receiving messages from a specified queue.
 - Dead letter, messages that fail all retires are send to an dead letter queue.
@@ -19,7 +20,7 @@ Features
 
 Documentation
 ===============
-Soon... take a look at the examples to see how it works.
+Soon... take a look at the examples_ to see how it works.
 
 Installation
 ===============
@@ -45,6 +46,8 @@ Please use the Issues_ for feature requests and troubleshooting usage.
    :target: https://github.com/viniciuschiele/simplebus/blob/master/LICENSE
 
 .. _amqp-storm: https://github.com/eandersson/amqp-storm
+
+.. _examples: https://github.com/viniciuschiele/simplebus/tree/master/examples
 
 .. _PyPi: https://pypi.python.org/pypi/simplebus
 
