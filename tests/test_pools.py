@@ -15,6 +15,8 @@
 """Unit tests."""
 
 from simplebus.pools import ResourcePool
+from simplebus.transports import amqp
+
 from unittest import TestCase
 
 
@@ -60,6 +62,15 @@ class TestResourcePool(TestCase):
         self.assertEqual('string1', pool.acquire())
         pool.release('string1')
         self.assertEqual('string2', pool.acquire())
+
+    def test_amqp_transport(self):
+        transport = amqp.Transport('amqp://guest:guest@localhost')
+        self.assertEqual(5, transport.min_channels)
+        self.assertEqual(20, transport.max_channels)
+
+        transport = amqp.Transport('amqp://guest:guest@localhost?min_channels=2&max_channels=10')
+        self.assertEqual(2, transport.min_channels)
+        self.assertEqual(10, transport.max_channels)
 
     class StringPool(ResourcePool):
         def __init__(self, min_size=None, max_size=None, invalidate_all=False):

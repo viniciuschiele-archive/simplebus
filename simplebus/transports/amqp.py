@@ -53,6 +53,14 @@ class Transport(base.Transport):
         self.__load_channel_limits(url)
 
     @property
+    def min_channels(self):
+        return self.__min_channels
+
+    @property
+    def max_channels(self):
+        return self.__max_channels
+
+    @property
     def is_open(self):
         return self.__connection and self.__connection.is_open
 
