@@ -14,6 +14,7 @@
 
 from simplebus import Bus
 from simplebus.compression import Compressor
+from simplebus.compression import registry
 
 
 class CustomCompression(Compressor):
@@ -30,15 +31,10 @@ class CustomCompression(Compressor):
         pass
 
 
-class Config(object):
-    SIMPLEBUS_COMPRESSIONS = {
-        'custom': CustomCompression()
-    }
-
-
 if __name__ == '__main__':
+    registry.register('custom', CustomCompression())
+
     bus = Bus(app_id='custom_compression')
-    bus.config.from_object(Config())
 
     message = {
         'property1': 'value1',
