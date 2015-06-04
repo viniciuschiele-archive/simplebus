@@ -38,3 +38,8 @@ class CompressionError(Exception):
 class CompressionNotFoundError(Exception):
     """Compression not found."""
     pass
+
+
+class LimitedExceeded(Exception):
+    """Resources were exceeded."""
+    pass

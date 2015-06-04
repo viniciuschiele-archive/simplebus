@@ -20,7 +20,7 @@ from abc import ABCMeta
 from abc import abstractmethod
 from queue import Empty
 from queue import LifoQueue
-
+from .errors import LimitedExceeded
 
 class ResourcePool(metaclass=ABCMeta):
     """Base class that provides a pool of resources."""
@@ -65,7 +65,7 @@ class ResourcePool(metaclass=ABCMeta):
             return self.__pool.get_nowait()
         except Empty:
             if not self.__inc_size():
-                raise RuntimeError('Limit of channels exceeded.')
+                raise LimitedExceeded('Limit of channels exceeded.')
 
             try:
                 return self._create_resource()
