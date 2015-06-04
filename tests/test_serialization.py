@@ -14,8 +14,8 @@
 
 """Unit tests."""
 
-from simplebus.exceptions import SerializerNotFoundError
-from simplebus.exceptions import SerializationError
+from simplebus.errors import SerializerNotFoundError
+from simplebus.errors import SerializationError
 from simplebus.serialization import SerializerRegistry
 from simplebus.serialization import JsonSerializer
 from unittest import TestCase

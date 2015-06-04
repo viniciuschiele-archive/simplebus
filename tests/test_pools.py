@@ -14,6 +14,7 @@
 
 """Unit tests."""
 
+from simplebus.errors import LimitedExceeded
 from simplebus.pools import ResourcePool
 from simplebus.transports import amqp
 
@@ -44,12 +45,12 @@ class TestResourcePool(TestCase):
         pool = self.StringPool(min_size=0, max_size=2)
         self.assertEqual('string1', pool.acquire())
         self.assertEqual('string2', pool.acquire())
-        self.assertRaises(RuntimeError, pool.acquire)
+        self.assertRaises(LimitedExceeded, pool.acquire)
 
         pool.release('string1')
 
         self.assertEqual('string3', pool.acquire())
-        self.assertRaises(RuntimeError, pool.acquire)
+        self.assertRaises(LimitedExceeded, pool.acquire)
 
         pool.release('string2')
         pool.release('string1')

@@ -23,11 +23,11 @@ import logging
 from abc import ABCMeta
 from abc import abstractmethod
 from simplebus.compression import decompress
-from simplebus.exceptions import CompressionError
-from simplebus.exceptions import CompressionNotFoundError
-from simplebus.exceptions import NoRetryError
-from simplebus.exceptions import SerializationError
-from simplebus.exceptions import SerializerNotFoundError
+from simplebus.errors import CompressionError
+from simplebus.errors import CompressionNotFoundError
+from simplebus.errors import NoRetryError
+from simplebus.errors import SerializationError
+from simplebus.errors import SerializerNotFoundError
 from simplebus.serialization import loads
 from simplebus.state import set_transport_message
 

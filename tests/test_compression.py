@@ -14,8 +14,8 @@
 
 """Unit tests."""
 
-from simplebus.exceptions import CompressionNotFoundError
-from simplebus.exceptions import CompressionError
+from simplebus.errors import CompressionNotFoundError
+from simplebus.errors import CompressionError
 from simplebus.compression import CompressorRegistry
 from simplebus.compression import GzipCompressor
 from unittest import TestCase

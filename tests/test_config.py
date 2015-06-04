@@ -14,17 +14,7 @@
 
 """Unit tests."""
 
-import datetime
-import uuid
-
 from simplebus import Config
-from simplebus import transport_message
-from simplebus import MessageHandler
-from simplebus import pull
-from simplebus import SerializationError
-from simplebus import SerializerNotFoundError
-from simplebus import subscribe
-from tests import create_bus
 from unittest import TestCase
 
 

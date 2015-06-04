@@ -18,8 +18,8 @@ import codecs
 
 from abc import ABCMeta
 from abc import abstractmethod
-from simplebus.exceptions import SerializationError
-from simplebus.exceptions import SerializerNotFoundError
+from simplebus.errors import SerializationError
+from simplebus.errors import SerializerNotFoundError
 
 try:
     import simplejson as json
