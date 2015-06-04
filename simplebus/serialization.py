@@ -15,6 +15,7 @@
 """Implements the serialization related objects."""
 
 import codecs
+import pickle
 
 from abc import ABCMeta
 from abc import abstractmethod
@@ -213,8 +214,39 @@ class MsgPackSerializer(Serializer):
             raise SerializationError(str(e))
 
 
+class PickleSerializer(Serializer):
+    """Pickle serializer."""
+
+    @property
+    def content_type(self):
+        """Gets the content type used to serialize."""
+        return 'application/x-pickle'
+
+    @property
+    def content_encoding(self):
+        """Gets the content encoding used to serialize."""
+        return 'utf-8'
+
+    def dumps(self, body):
+        """Serializes the specified body into bytes."""
+
+        try:
+            return pickle.dumps(body)
+        except Exception as e:
+            raise SerializationError(str(e))
+
+    def loads(self, body):
+        """Deserializes the specified body into a object."""
+
+        try:
+            return pickle.loads(body, encoding=self.content_encoding)
+        except Exception as e:
+            raise SerializationError(str(e))
+
+
 registry = SerializerRegistry()
 registry.register('json', JsonSerializer())
+registry.register('pickle', PickleSerializer())
 
 if msgpack:
     registry.register('msgpack', MsgPackSerializer())

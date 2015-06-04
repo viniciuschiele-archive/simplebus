@@ -18,6 +18,7 @@ from simplebus.errors import SerializerNotFoundError
 from simplebus.errors import SerializationError
 from simplebus.serialization import SerializerRegistry
 from simplebus.serialization import JsonSerializer
+from simplebus.serialization import PickleSerializer
 from unittest import TestCase
 
 
@@ -81,6 +82,20 @@ class TestSerialization(TestCase):
         self.assertEqual('hello', message)
 
         message = self.registry.loads(body, None, None, serializer='json')
+        self.assertEqual('hello', message)
+
+    def test_pickle(self):
+        self.registry.register('pickle', PickleSerializer())
+
+        content_type, content_encoding, body = self.registry.dumps('hello', serializer='pickle')
+        self.assertEqual('application/x-pickle', content_type)
+        self.assertEqual('utf-8', content_encoding)
+        self.assertEqual(b'\x80\x03X\x05\x00\x00\x00helloq\x00.', body)
+
+        message = self.registry.loads(body, content_type, content_encoding)
+        self.assertEqual('hello', message)
+
+        message = self.registry.loads(body, None, None, serializer='pickle')
         self.assertEqual('hello', message)
 
     def test_not_found(self):
