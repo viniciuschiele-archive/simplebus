@@ -20,8 +20,8 @@ import time
 
 from abc import ABCMeta
 from abc import abstractmethod
-from simplebus.utils import EventHandler
 from threading import Thread
+from ..utils import EventHandler
 
 LOGGER = logging.getLogger(__name__)
 

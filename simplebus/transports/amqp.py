@@ -23,12 +23,12 @@ except ImportError:
 import logging
 import uuid
 
-from simplebus.pools import ResourcePool
-from simplebus.transports import base
-from simplebus.utils import EventHandler
 from threading import Lock
 from threading import Thread
 from urllib import parse
+from ..pools import ResourcePool
+from ..transports import base
+from ..utils import EventHandler
 
 LOGGER = logging.getLogger(__name__)
 

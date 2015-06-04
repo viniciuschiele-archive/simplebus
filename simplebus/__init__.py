@@ -14,11 +14,11 @@
 
 """Simple message bus for Python 3+."""
 
-from simplebus.bus import Bus
-from simplebus.cancellables import Cancellable
-from simplebus.config import Config
-from simplebus.decorators import pull
-from simplebus.decorators import subscribe
-from simplebus.handlers import MessageHandler
-from simplebus.state import current_bus
-from simplebus.state import transport_message
+from .bus import Bus
+from .cancellables import Cancellable
+from .config import Config
+from .decorators import pull
+from .decorators import subscribe
+from .handlers import MessageHandler
+from .state import current_bus
+from .state import transport_message

@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from simplebus.transports.base import RecoveryAwareTransport
-from simplebus.utils import ref_to_obj
+from ..transports.base import RecoveryAwareTransport
+from ..utils import ref_to_obj
 
 
 TRANSPORT_ALIASES = {

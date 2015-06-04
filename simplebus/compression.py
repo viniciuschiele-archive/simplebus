@@ -18,8 +18,8 @@ import zlib
 
 from abc import ABCMeta
 from abc import abstractmethod
-from simplebus.errors import CompressionError
-from simplebus.errors import CompressionNotFoundError
+from .errors import CompressionError
+from .errors import CompressionNotFoundError
 
 
 class CompressorRegistry(object):

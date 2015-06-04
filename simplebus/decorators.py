@@ -15,7 +15,7 @@
 """Implements the decorator methods."""
 
 
-from simplebus.state import current_bus
+from .state import current_bus
 
 
 def pull(queue, **options):

@@ -14,20 +14,20 @@
 
 """Message bus implementation."""
 
-from simplebus.config import Config
-from simplebus.cancellables import Cancellation
-from simplebus.cancellables import Subscription
-from simplebus.compression import compress
-from simplebus.dispatchers import PullerDispatcher
-from simplebus.dispatchers import SubscriberDispatcher
-from simplebus.handlers import CallbackHandler
-from simplebus.handlers import MessageHandler
-from simplebus.serialization import dumps
-from simplebus.state import set_current_bus
-from simplebus.transports import create_transport
-from simplebus.transports.base import TransportMessage
-from simplebus.utils import create_random_id
-from simplebus.utils import Loop
+from .cancellables import Cancellation
+from .cancellables import Subscription
+from .config import Config
+from .compression import compress
+from .dispatchers import PullerDispatcher
+from .dispatchers import SubscriberDispatcher
+from .handlers import CallbackHandler
+from .handlers import MessageHandler
+from .serialization import dumps
+from .state import set_current_bus
+from .transports import create_transport
+from .transports.base import TransportMessage
+from .utils import create_random_id
+from .utils import Loop
 
 
 class Bus(object):

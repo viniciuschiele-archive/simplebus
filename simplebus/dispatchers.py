@@ -22,14 +22,14 @@ import logging
 
 from abc import ABCMeta
 from abc import abstractmethod
-from simplebus.compression import decompress
-from simplebus.errors import CompressionError
-from simplebus.errors import CompressionNotFoundError
-from simplebus.errors import NoRetryError
-from simplebus.errors import SerializationError
-from simplebus.errors import SerializerNotFoundError
-from simplebus.serialization import loads
-from simplebus.state import set_transport_message
+from .compression import decompress
+from .errors import CompressionError
+from .errors import CompressionNotFoundError
+from .errors import NoRetryError
+from .errors import SerializationError
+from .errors import SerializerNotFoundError
+from .serialization import loads
+from .state import set_transport_message
 
 
 LOGGER = logging.getLogger(__name__)

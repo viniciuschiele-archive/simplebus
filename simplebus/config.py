@@ -17,9 +17,7 @@
 import copy
 import multiprocessing
 
-from simplebus.compression import GzipCompressor
-from simplebus.serialization import JsonSerializer
-from simplebus.utils import merge_dict
+from .utils import merge_dict
 
 
 class Config(object):

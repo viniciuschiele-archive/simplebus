@@ -14,7 +14,7 @@
 
 import threading
 
-from simplebus.local import Proxy
+from .local import Proxy
 
 __bus = None
 __local = threading.local()
