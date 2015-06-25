@@ -197,97 +197,83 @@ class Transport(base.Transport):
         channel = self.__channels.acquire()
         try:
             channel.confirm_deliveries()
-            channel.basic.publish(message.body, routing_key, exchange, mandatory=mandatory, properties=properties)
+            msg = amqpstorm.Message.create(channel, message.body, properties)
+            msg.publish(routing_key, exchange, mandatory)
         finally:
             self.__channels.release(channel)
 
 
 class TransportMessage(base.TransportMessage):
-    def __init__(self, body, method, properties, channel, dead_letter_queue=None, retry_queue=None):
-        super().__init__(body=body)
+    def __init__(self, message, dead_letter_queue=None, retry_queue=None):
+        super().__init__()
 
-        self.__method = method
-        self.__properties = properties
-        self.__channel = channel
+        self.__message = message
         self.__dead_letter_queue = dead_letter_queue
         self.__retry_queue = retry_queue
 
-        app_id = properties.get('app_id')
-        if app_id:
-            self.app_id = bytes.decode(app_id)
+        properties = message.properties
 
-        message_id = properties.get('message_id')
-        if message_id:
-            self.message_id = bytes.decode(message_id)
+        self.app_id = properties.get('app_id')
+        self.message_id = properties.get('message_id')
+        self.content_type = properties.get('content_type')
+        self.content_encoding = properties.get('content_encoding')
+        self.body = message._body
 
-        content_type = properties.get('content_type')
-        if content_type:
-            self.content_type = bytes.decode(content_type)
+        self.headers = properties.get('headers')
 
-        content_encoding = properties.get('content_encoding')
-        if content_encoding:
-            self.content_encoding = bytes.decode(content_encoding)
+        if self.headers is None:
+            pass
 
-        headers = properties.get('headers')
-        if not headers:
-            headers = self.headers
-            properties['headers'] = headers
+        self._retry_count = self.headers.get('x-retry-count') or 0
 
-        for k, v in headers.items():
-            self.headers[k.decode()] = v.decode() if isinstance(v, bytes) else v
-
-        self._retry_count = headers.get(bytes('x-retry-count', 'utf-8')) or 0
-
-        expiration = self.__properties.get('expiration')
+        expiration = properties.get('expiration')
         if expiration:
             self.expiration = int(expiration)
 
     def delete(self):
-        if self.__channel:
-            self.__channel.basic.ack(self.__method.get('delivery_tag'))
-            self.__channel = None
+        if self.__message:
+            self.__message.ack()
+            self.__message = None
 
     def dead_letter(self, reason):
-        if self.__channel:
-            self.__set_header_retry_count(0)
-            self.__set_header_death_reason(reason)
+        if not self.__message:
+            return
 
-            self.__channel.basic.ack(self.__method.get('delivery_tag'))
+        self.__set_header_retry_count(0)
+        self.__set_header_death_reason(reason)
 
-            if not self.__dead_letter_queue:
-                return
+        self.__message.ack()
 
-            self.__channel.basic.publish(
-                self.body,
-                self.__dead_letter_queue,
-                '',
-                self.__properties)
-            self.__channel = None
+        if not self.__dead_letter_queue:
+            return
+
+        self.__message.publish(self.__dead_letter_queue, '')
+        self.__message = None
 
     def retry(self):
-        if self.__channel:
-            self.__set_header_retry_count(self.retry_count + 1)
+        if not self.__message:
+            return
 
-            if self.__retry_queue:
-                routing_key = self.__retry_queue
-                exchange = ''
-            else:
-                routing_key = str(self.__method.get('routing_key'), encoding='utf-8')
-                exchange = str(self.__method.get('exchange'), encoding='utf-8')
+        self.__set_header_retry_count(self.retry_count + 1)
 
-            self.__channel.basic.ack(self.__method.get('delivery_tag'))
-            self.__channel.basic.publish(
-                self.body,
-                routing_key,
-                exchange,
-                self.__properties)
+        if self.__retry_queue:
+            routing_key = self.__retry_queue
+            exchange = ''
+        else:
+            method = self.__message.method
+            routing_key = method.get('routing_key')
+            exchange = method.get('exchange')
+
+        self.__message.ack()
+        self.__message.publish(routing_key, exchange)
+        self.__message = None
 
     def __set_header_death_reason(self, reason):
-        headers = self.__properties.get('headers')
+        headers = self.__message._properties.get('headers')
         headers[bytes('x-death-reason', 'utf-8')] = reason
 
     def __set_header_retry_count(self, retry_count):
-        headers = self.__properties.get('headers')
+        headers = self.__message._properties.get('headers')
         headers[bytes('x-retry-count', 'utf-8')] = retry_count
 
 
@@ -335,7 +321,7 @@ class Consumer(object):
 
     def _start_receiving(self, channel):
         try:
-            channel.start_consuming()
+            channel.start_consuming(to_tuple=False)
         except Exception as e:
             self.error(self, e)
 
@@ -391,15 +377,14 @@ class Puller(Consumer):
 
         self.__channels.clear()
 
-    def __on_message(self, body, channel, method, properties):
+    def __on_message(self, message):
         try:
-            message = TransportMessage(body, method, properties, channel,
-                                       self.__dead_letter_queue, self.__retry_queue)
+            transport_message = TransportMessage(message, self.__dead_letter_queue, self.__retry_queue)
 
-            if self.__retry and message.retry_count > self.__max_retries:
-                message.dead_letter('Max retries exceeded.')
+            if self.__retry and transport_message.retry_count > self.__max_retries:
+                transport_message.dead_letter('Max retries exceeded.')
             else:
-                self.__callback(message)
+                self.__callback(transport_message)
         except:
             LOGGER.exception("Puller failed, queue '%s'." % self.__queue)
 
@@ -436,9 +421,9 @@ class Subscriber(Consumer):
 
         self.__channels.clear()
 
-    def __on_message(self, body, channel, method, properties):
+    def __on_message(self, message):
         try:
-            message = TransportMessage(body, method, properties, channel)
-            self.__callback(message)
+            transport_message = TransportMessage(message)
+            self.__callback(transport_message)
         except:
             LOGGER.exception("Subscriber failed, topic: '%s'." % self.__topic)

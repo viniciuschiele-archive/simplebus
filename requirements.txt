@@ -1,1 +1,1 @@
-amqp-storm==1.1.10
+amqp-storm==1.2.0
