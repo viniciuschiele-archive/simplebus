@@ -239,13 +239,13 @@ class TransportMessage(base.TransportMessage):
         if not self.__message:
             return
 
-        self.__set_header_retry_count(0)
-        self.__set_header_death_reason(reason)
-
         self.__message.ack()
 
         if not self.__dead_letter_queue:
             return
+
+        self.__set_header_retry_count(0)
+        self.__set_header_death_reason(reason)
 
         self.__message.publish(self.__dead_letter_queue, '')
         self.__message = None
