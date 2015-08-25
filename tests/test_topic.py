@@ -14,6 +14,8 @@
 
 """Unit tests."""
 
+import threading
+
 from simplebus import MessageHandler
 from simplebus import subscribe
 from simplebus import transport_message
@@ -67,8 +69,6 @@ class TestTopic(TestCase):
         subscription.cancel()
 
     def test_max_concurrency_level(self):
-        import threading
-
         self.thread_ids = []
 
         def handle(message):

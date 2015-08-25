@@ -101,7 +101,7 @@ class TestQueue(TestCase):
             self.assertEqual(key, message)
             self.bus.loop.stop()
 
-        self.bus.pull(self.queue, handle, dead_letter=True, retry=True, max_retries=2)
+        self.bus.pull(self.queue, handle, dead_letter=True, retry=True, max_retries=2, retry_delay=0)
         self.bus.pull(self.queue + '.error', handle_error)
         self.bus.push(self.queue, key)
         self.bus.loop.start()
@@ -117,7 +117,7 @@ class TestQueue(TestCase):
             elapsed = datetime.datetime.now() - started_at
 
             try:
-                if elapsed.microseconds < 100 * 1000:
+                if elapsed.total_seconds() < 0.2:
                     self.fail('Message received too early.')
             finally:
                 self.bus.loop.stop()

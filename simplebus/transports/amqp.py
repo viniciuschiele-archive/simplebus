@@ -36,7 +36,7 @@ LOGGER = logging.getLogger(__name__)
 class Transport(base.Transport):
     def __init__(self, url):
         if amqpstorm is None:
-            raise ImportError('Missing amqp-storm library (pip install amqp-storm)')
+            raise ImportError('Missing amqp-storm library (pip install amqp-storm==1.2.3)')
 
         self.__connection = None
         self.__connection_lock = Lock()
@@ -189,10 +189,12 @@ class Transport(base.Transport):
         if message.expiration:
             properties['expiration'] = str(message.expiration)
 
-        properties['headers'] = message.headers.copy()
+        headers = message.headers.copy()
 
         if message.retry_count > 0:
-            properties['headers']['x-retry-count'] = message.retry_count
+            headers['x-retry-count'] = message.retry_count
+
+        properties['headers'] = headers
 
         channel = self.__channels.acquire()
         try:
@@ -211,22 +213,16 @@ class TransportMessage(base.TransportMessage):
         self.__dead_letter_queue = dead_letter_queue
         self.__retry_queue = retry_queue
 
-        properties = message.properties
-
-        self.app_id = properties.get('app_id')
-        self.message_id = properties.get('message_id')
-        self.content_type = properties.get('content_type')
-        self.content_encoding = properties.get('content_encoding')
+        self.app_id = message.app_id
+        self.message_id = message.message_id
+        self.content_type = message.content_type
+        self.content_encoding = message.content_encoding
         self.body = message._body
+        self.headers.update(message.properties.get('headers'))
 
-        self.headers = properties.get('headers')
+        self._retry_count = self.headers.pop('x-retry-count', 0)
 
-        if self.headers is None:
-            pass
-
-        self._retry_count = self.headers.get('x-retry-count') or 0
-
-        expiration = properties.get('expiration')
+        expiration = message.properties.get('expiration')
         if expiration:
             self.expiration = int(expiration)
 
@@ -297,39 +293,8 @@ class ChannelPool(ResourcePool):
         return resource.is_open
 
 
-class Consumer(object):
-    def __init__(self, connection):
-        self.__connection = connection
-        self.error = EventHandler()
-
-    def _create_dead_letter_queue(self, dead_letter_queue):
-        with self.__connection.channel() as channel:
-            channel.queue.declare(dead_letter_queue, durable=True)
-
-    def _create_retry_queue(self, queue, retry_queue, retry_delay):
-        args = {
-            'x-dead-letter-exchange': '',
-            'x-dead-letter-routing-key': queue,
-            'x-message-ttl': retry_delay}
-
-        try:
-            with self.__connection.channel() as channel:
-                channel.queue.declare(retry_queue, durable=True, arguments=args)
-        except amqpstorm.AMQPChannelError as e:
-            if 'x-message-ttl' not in str(e):  # already exists a queue with ttl
-                raise
-
-    def _start_receiving(self, channel):
-        try:
-            channel.start_consuming(to_tuple=False)
-        except Exception as e:
-            self.error(self, e)
-
-
-class Puller(Consumer):
+class Puller(object):
     def __init__(self, connection, queue, callback, options):
-        super().__init__(connection)
-
         self.__connection = connection
         self.__queue = queue
         self.__callback = callback
@@ -353,12 +318,14 @@ class Puller(Consumer):
             if self.__retry_delay > 0:
                 self.__retry_queue += '.retry'
 
+        self.error = EventHandler()
+
     def start(self):
         if self.__dead_letter:
-            self._create_dead_letter_queue(self.__dead_letter_queue)
+            self.__create_dead_letter_queue(self.__dead_letter_queue)
 
         if self.__retry and self.__retry_delay > 0:
-            self._create_retry_queue(self.__queue, self.__retry_queue, self.__retry_delay)
+            self.__create_retry_queue(self.__queue, self.__retry_queue, self.__retry_delay)
 
         for i in range(self.__max_concurrency):
             channel = self.__connection.channel()
@@ -367,7 +334,7 @@ class Puller(Consumer):
             channel.basic.consume(self.__on_message, self.__queue)
             self.__channels.append(channel)
 
-            thread = Thread(target=self._start_receiving, args=(channel,))
+            thread = Thread(target=self.__start_receiving, args=(channel,))
             thread.daemon = True
             thread.start()
 
@@ -388,11 +355,32 @@ class Puller(Consumer):
         except:
             LOGGER.exception("Puller failed, queue '%s'." % self.__queue)
 
+    def __create_dead_letter_queue(self, dead_letter_queue):
+        with self.__connection.channel() as channel:
+            channel.queue.declare(dead_letter_queue, durable=True)
 
-class Subscriber(Consumer):
+    def __create_retry_queue(self, queue, retry_queue, retry_delay):
+        args = {
+            'x-dead-letter-exchange': '',
+            'x-dead-letter-routing-key': queue,
+            'x-message-ttl': retry_delay}
+
+        try:
+            with self.__connection.channel() as channel:
+                channel.queue.declare(retry_queue, durable=True, arguments=args)
+        except amqpstorm.AMQPChannelError as e:
+            if 'x-message-ttl' not in str(e):  # already exists a queue with ttl
+                raise
+
+    def __start_receiving(self, channel):
+        try:
+            channel.start_consuming(to_tuple=False)
+        except Exception as e:
+            self.error(self, e)
+
+
+class Subscriber(object):
     def __init__(self, connection, topic, callback, options):
-        super().__init__(connection)
-
         self.__connection = connection
         self.__topic = topic
         self.__callback = callback
@@ -401,6 +389,8 @@ class Subscriber(Consumer):
         self.__queue = topic + ':' + str(uuid.uuid4()).replace('-', '')
         self.__max_concurrency = options.get('max_concurrency')
         self.__prefetch_count = options.get('prefetch_count')
+
+        self.error = EventHandler()
 
     def start(self):
         for i in range(self.__max_concurrency):
@@ -411,7 +401,7 @@ class Subscriber(Consumer):
             channel.basic.consume(self.__on_message, self.__queue)
             self.__channels.append(channel)
 
-            thread = Thread(target=self._start_receiving, args=(channel,))
+            thread = Thread(target=self.__start_receiving, args=(channel,))
             thread.daemon = True
             thread.start()
 
@@ -427,3 +417,9 @@ class Subscriber(Consumer):
             self.__callback(transport_message)
         except:
             LOGGER.exception("Subscriber failed, topic: '%s'." % self.__topic)
+
+    def __start_receiving(self, channel):
+        try:
+            channel.start_consuming(to_tuple=False)
+        except Exception as e:
+            self.error(self, e)
