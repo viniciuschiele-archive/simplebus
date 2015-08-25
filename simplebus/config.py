@@ -15,7 +15,6 @@
 """Implements the configuration related objects."""
 
 import copy
-import multiprocessing
 
 from .utils import merge_dict
 
@@ -39,7 +38,7 @@ class Config(object):
             'max_retries': 3,
             'retry_delay': 0,
             'expiration': None,
-            'max_concurrency': multiprocessing.cpu_count(),
+            'max_concurrency': 1,
             'prefetch_count': 10,
             'compression': None,
             'serializer': 'json',
@@ -52,7 +51,7 @@ class Config(object):
         '*': {
             'endpoint': None,
             'expiration': None,
-            'max_concurrency': multiprocessing.cpu_count(),
+            'max_concurrency': 1,
             'prefetch_count': 10,
             'compression': None,
             'serializer': 'json',
