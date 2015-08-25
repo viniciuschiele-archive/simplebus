@@ -76,9 +76,9 @@ class Bus(object):
 
         self.__started = True
 
-        self.__load_imports()
-
         set_current_bus(self)
+
+        self.__load_imports()
 
     def stop(self):
         """Stops the bus."""
