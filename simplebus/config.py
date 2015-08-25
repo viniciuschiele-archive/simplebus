@@ -34,9 +34,9 @@ class Config(object):
         '*': {
             'endpoint': None,
             'dead_letter': True,
-            'retry': True,
+            'retry': False,
             'max_retries': 3,
-            'retry_delay': 0,
+            'retry_delay': 1000,
             'expiration': None,
             'max_concurrency': 1,
             'prefetch_count': 10,
