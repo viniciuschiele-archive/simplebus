@@ -1,0 +1,5 @@
+# Changelog
+
+### Version 1.0.1
+ - Fixed bug in retry logic.
+ - Moved retry logic to the transport level.
