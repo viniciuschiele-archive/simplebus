@@ -76,59 +76,7 @@ class DefaultDispatcher(MessageDispatcher):
                 self._serializer)
 
             self._handler.handle(message)
+
+            transport_message.delete()
         finally:
             set_transport_message(None)
-
-
-class PullerDispatcher(DefaultDispatcher):
-    """
-    Dispatcher responsible for dispatching the message to the message handler.
-    """
-    def __init__(self,
-                 queue,
-                 handler,
-                 serializer,
-                 compression):
-        super().__init__(handler, serializer, compression)
-        self.__queue = queue
-
-    def dispatch(self, transport_message):
-        """Dispatches the message."""
-
-        try:
-            super().dispatch(transport_message)
-        except (CompressionError, CompressionNotFoundError,
-                NoRetryError, SerializerNotFoundError, SerializationError) as e:
-            transport_message.dead_letter(str(e))
-            LOGGER.exception(str(e))
-        except:
-            LOGGER.exception("Message dispatch failed. message id: '%s', queue: '%s'." %
-                             (transport_message.message_id, self.__queue))
-            transport_message.retry()
-        else:
-            transport_message.delete()
-
-
-class SubscriberDispatcher(DefaultDispatcher):
-    """
-    Dispatcher responsible for dispatching the message to the message handler.
-    """
-
-    def __init__(self, topic,
-                 handler,
-                 serializer,
-                 compression):
-        super().__init__(handler, serializer, compression)
-        self.__topic = topic
-
-    def dispatch(self, transport_message):
-        """Dispatches the message."""
-
-        try:
-            super().dispatch(transport_message)
-        except:
-            LOGGER.exception(
-                "Message dispatch failed. message id: '%s', topic: '%s'." %
-                (transport_message.message_id, self.__topic))
-        finally:
-            transport_message.delete()

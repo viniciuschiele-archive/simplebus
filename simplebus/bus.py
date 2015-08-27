@@ -18,8 +18,7 @@ from .cancellables import Cancellation
 from .cancellables import Subscription
 from .config import Config
 from .compression import compress
-from .dispatchers import PullerDispatcher
-from .dispatchers import SubscriberDispatcher
+from .dispatchers import DefaultDispatcher
 from .handlers import CallbackHandler
 from .handlers import MessageHandler
 from .serialization import dumps
@@ -111,7 +110,7 @@ class Bus(object):
         id = create_random_id()
         options = self.__get_queue_options(queue, options)
         handler = self.__get_handler(callback)
-        dispatcher = PullerDispatcher(queue, handler, options.get('serializer'), options.get('compression'))
+        dispatcher = DefaultDispatcher(handler, options.get('serializer'), options.get('compression'))
         transport = self.__get_transport(options.get('endpoint'))
         transport.pull(id, queue, dispatcher, options)
         return Cancellation(id, transport)
@@ -136,7 +135,7 @@ class Bus(object):
         id = create_random_id()
         options = self.__get_topic_options(topic, options)
         handler = self.__get_handler(callback)
-        dispatcher = SubscriberDispatcher(topic, handler, options.get('serializer'), options.get('compression'))
+        dispatcher = DefaultDispatcher(handler, options.get('serializer'), options.get('compression'))
         transport = self.__get_transport(options.get('endpoint'))
         transport.subscribe(id, topic, dispatcher, options)
         return Subscription(id, transport)

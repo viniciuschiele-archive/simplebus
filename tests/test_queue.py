@@ -90,6 +90,21 @@ class TestQueue(TestCase):
         self.bus.push(self.queue, 'hello')
         self.bus.loop.start()
 
+    def test_dead_letter(self):
+        key = str(uuid.uuid4())
+
+        def handle(message):
+            raise RuntimeError('error')
+
+        def handle_error(message):
+            self.assertEqual(key, message)
+            self.bus.loop.stop()
+
+        self.bus.pull(self.queue, handle, dead_letter=True)
+        self.bus.pull(self.queue + '.error', handle_error)
+        self.bus.push(self.queue, key)
+        self.bus.loop.start()
+
     def test_max_retries(self):
         key = str(uuid.uuid4())
 

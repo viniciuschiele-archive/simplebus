@@ -348,10 +348,13 @@ class Puller(object):
         try:
             transport_message = TransportMessage(message, self.__dead_letter_queue, self.__retry_queue)
 
-            if self.__retry and transport_message.retry_count > self.__max_retries:
-                transport_message.dead_letter('Max retries exceeded.')
-            else:
+            try:
                 self.__callback(transport_message)
+            except Exception as e:
+                if self.__retry and transport_message.retry_count < self.__max_retries:
+                    transport_message.retry()
+                else:
+                    transport_message.dead_letter(str(e))
         except:
             LOGGER.exception("Puller failed, queue '%s'." % self.__queue)
 
