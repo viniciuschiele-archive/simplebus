@@ -246,13 +246,15 @@ class PickleSerializer(Serializer):
 
 
 class SerializeMessageStep(PipelineStep):
-    def invoke(self, context):
+    def invoke(self, context, next_step):
         content_type, content_encoding, body = \
             registry.dumps(context.message, context.options.get('serializer'))
 
         context.content_type = content_type
         context.content_encoding = content_encoding
         context.message = body
+
+        next_step()
 
 
 registry = SerializerRegistry()

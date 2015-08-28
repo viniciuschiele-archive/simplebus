@@ -114,17 +114,17 @@ class GzipCompressor(Compressor):
 
 
 class CompressMessageStep(PipelineStep):
-    def invoke(self, context):
+    def invoke(self, context, next_step):
         compression = context.options.get('compression')
-        if not compression:
-            return
+        if compression:
+            if context.headers is None:
+                context.headers = {}
 
-        if context.headers is None:
-            context.headers = {}
+            algorithm, message = registry.compress(context.message, compression)
+            context.headers['x-compression'] = algorithm
+            context.message = message
 
-        algorithm, message = registry.compress(context.message, compression)
-        context.headers['x-compression'] = algorithm
-        context.message = message
+        next_step()
 
 
 registry = CompressorRegistry()

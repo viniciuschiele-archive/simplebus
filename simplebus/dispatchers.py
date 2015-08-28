@@ -84,7 +84,7 @@ class DispatchMessageStep(PipelineStep):
     def __init__(self, transports):
         self.__transports = transports
 
-    def invoke(self, context):
+    def invoke(self, context, next_step):
         transport_message = TransportMessage(context.app_id,
                                              create_random_id(),
                                              context.content_type,
@@ -101,6 +101,8 @@ class DispatchMessageStep(PipelineStep):
             transport.push(context.queue, transport_message, context.options)
         else:
             transport.publish(context.topic, transport_message, context.options)
+
+        next_step()
 
     def __get_transport(self, endpoint):
         """Gets the transport for the specified endpoint."""

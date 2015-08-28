@@ -3,12 +3,15 @@ class Pipeline(object):
         self.steps = []
 
     def invoke(self, context):
-        for step in self.steps:
-            step.invoke(context)
+        self.__invoke_step(context, 0)
+
+    def __invoke_step(self, context, index):
+        if index < len(self.steps):
+            self.steps[index].invoke(context, lambda: self.__invoke_step(context, index+1))
 
 
 class PipelineStep(object):
-    def invoke(self, context):
+    def invoke(self, context, next_step):
         pass
 
 
