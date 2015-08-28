@@ -23,13 +23,11 @@ import logging
 from abc import ABCMeta
 from abc import abstractmethod
 from .compression import decompress
-from .errors import CompressionError
-from .errors import CompressionNotFoundError
-from .errors import NoRetryError
-from .errors import SerializationError
-from .errors import SerializerNotFoundError
+from .pipeline import PipelineStep
 from .serialization import loads
 from .state import set_transport_message
+from .transports.base import TransportMessage
+from .utils import create_random_id
 
 
 LOGGER = logging.getLogger(__name__)
@@ -80,3 +78,39 @@ class DefaultDispatcher(MessageDispatcher):
             transport_message.delete()
         finally:
             set_transport_message(None)
+
+
+class DispatchMessageStep(PipelineStep):
+    def __init__(self, transports):
+        self.__transports = transports
+
+    def invoke(self, context):
+        transport_message = TransportMessage(context.app_id,
+                                             create_random_id(),
+                                             context.content_type,
+                                             context.content_encoding,
+                                             context.message,
+                                             context.options.get('expiration'))
+
+        if context.headers:
+            transport_message.headers.update(context.headers)
+
+        transport = self.__get_transport(context.options.get('endpoint'))
+
+        if context.queue:
+            transport.push(context.queue, transport_message, context.options)
+        else:
+            transport.publish(context.topic, transport_message, context.options)
+
+    def __get_transport(self, endpoint):
+        """Gets the transport for the specified endpoint."""
+
+        if endpoint is None:
+            endpoint = 'default'
+
+        transport = self.__transports.get(endpoint)
+
+        if transport is None:
+            raise RuntimeError("Endpoint '%s' not found" % endpoint)
+
+        return transport

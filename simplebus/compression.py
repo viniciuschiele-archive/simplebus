@@ -20,6 +20,7 @@ from abc import ABCMeta
 from abc import abstractmethod
 from .errors import CompressionError
 from .errors import CompressionNotFoundError
+from .pipeline import PipelineStep
 
 
 class CompressorRegistry(object):
@@ -112,13 +113,22 @@ class GzipCompressor(Compressor):
             raise CompressionError(e)
 
 
+class CompressMessageStep(PipelineStep):
+    def invoke(self, context):
+        compression = context.options.get('compression')
+        if not compression:
+            return
+
+        if context.headers is None:
+            context.headers = {}
+
+        algorithm, message = registry.compress(context.message, compression)
+        context.headers['x-compression'] = algorithm
+        context.message = message
+
+
 registry = CompressorRegistry()
 registry.register('gzip', GzipCompressor())
-
-
-def compress(body, compression):
-    """Compress the specified body using the specified compression."""
-    return registry.compress(body, compression)
 
 
 def decompress(body, content_type, compression=None):

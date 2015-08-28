@@ -21,6 +21,7 @@ from abc import ABCMeta
 from abc import abstractmethod
 from .errors import SerializationError
 from .errors import SerializerNotFoundError
+from .pipeline import PipelineStep
 
 try:
     import simplejson as json
@@ -244,17 +245,22 @@ class PickleSerializer(Serializer):
             raise SerializationError(str(e))
 
 
+class SerializeMessageStep(PipelineStep):
+    def invoke(self, context):
+        content_type, content_encoding, body = \
+            registry.dumps(context.message, context.options.get('serializer'))
+
+        context.content_type = content_type
+        context.content_encoding = content_encoding
+        context.message = body
+
+
 registry = SerializerRegistry()
 registry.register('json', JsonSerializer())
 registry.register('pickle', PickleSerializer())
 
 if msgpack:
     registry.register('msgpack', MsgPackSerializer())
-
-
-def dumps(body, serializer=None):
-    """Serializes the specified body using the specified serializer."""
-    return registry.dumps(body, serializer)
 
 
 def loads(body, content_type, content_encoding, serializer=None):

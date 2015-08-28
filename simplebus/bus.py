@@ -17,16 +17,14 @@
 from .cancellables import Cancellation
 from .cancellables import Subscription
 from .config import Config
-from .compression import compress
-from .dispatchers import DefaultDispatcher
-from .handlers import CallbackHandler
-from .handlers import MessageHandler
-from .serialization import dumps
+from .compression import CompressMessageStep
+from .dispatchers import DefaultDispatcher, DispatchMessageStep
+from .handlers import CallbackHandler, MessageHandler
+from .pipeline import Pipeline, PipelineContext
+from .serialization import SerializeMessageStep
 from .state import set_current_bus
 from .transports import create_transport
-from .transports.base import TransportMessage
-from .utils import create_random_id
-from .utils import Loop
+from .utils import create_random_id, Loop
 
 
 class Bus(object):
@@ -41,6 +39,12 @@ class Bus(object):
         self.__queues_cached = {}
         self.__topics_cached = {}
         self.__loop = Loop()
+
+        self.__outgoing_pipeline = Pipeline()
+        self.__outgoing_pipeline.steps.append(SerializeMessageStep())
+        self.__outgoing_pipeline.steps.append(CompressMessageStep())
+        self.__outgoing_pipeline.steps.append(DispatchMessageStep(self.__transports))
+
         self.config = Config()
 
     @property
@@ -61,7 +65,7 @@ class Bus(object):
         """Starts the bus."""
 
         if len(self.config.SIMPLEBUS_ENDPOINTS) == 0:
-            raise RuntimeError('SimpleBus should have at least one endpoint')
+            raise RuntimeError('SimpleBus must have at least one endpoint')
 
         for key, endpoint in self.config.SIMPLEBUS_ENDPOINTS.items():
             transport = create_transport(
@@ -95,12 +99,12 @@ class Bus(object):
 
         self.__ensure_started()
 
-        options = self.__get_queue_options(queue, options)
+        context = PipelineContext()
+        context.queue = queue
+        context.message = message
+        context.options = self.__get_queue_options(queue, options)
 
-        transport_message = self.__create_transport_message(message, **options)
-
-        transport = self.__get_transport(options.get('endpoint'))
-        transport.push(queue, transport_message, options)
+        self.__outgoing_pipeline.invoke(context)
 
     def pull(self, queue, callback, **options):
         """Starts receiving messages from the specified queue."""
@@ -120,12 +124,12 @@ class Bus(object):
 
         self.__ensure_started()
 
-        options = self.__get_topic_options(topic, options)
+        context = PipelineContext()
+        context.topic = topic
+        context.message = message
+        context.options = self.__get_topic_options(topic, options)
 
-        transport_message = self.__create_transport_message(message, **options)
-
-        transport = self.__get_transport(options.get('endpoint'))
-        transport.publish(topic, transport_message, options)
+        self.__outgoing_pipeline.invoke(context)
 
     def subscribe(self, topic, callback, **options):
         """Subscribes to receive published messages to the specified topic."""
@@ -139,23 +143,6 @@ class Bus(object):
         transport = self.__get_transport(options.get('endpoint'))
         transport.subscribe(id, topic, dispatcher, options)
         return Subscription(id, transport)
-
-    def __create_transport_message(self, message, **options):
-        content_type, content_encoding, body = dumps(message, options.get('serializer'))
-
-        transport_message = TransportMessage(self.__app_id,
-                                             create_random_id(),
-                                             content_type,
-                                             content_encoding,
-                                             body,
-                                             options.get('expiration'))
-
-        compression = options.get('compression')
-        if compression:
-            transport_message.headers['x-compression'], transport_message.body = \
-                compress(body, compression)
-
-        return transport_message
 
     def __ensure_started(self):
         """If the bus is not started it starts."""
