@@ -20,64 +20,12 @@ dispatch them to the message handlers.
 
 import logging
 
-from abc import ABCMeta
-from abc import abstractmethod
-from .compression import decompress
 from .pipeline import PipelineStep
-from .serialization import loads
-from .state import set_transport_message
 from .transports.base import TransportMessage
-from .utils import create_random_id
+from .utils import create_random_id, get_transport
 
 
 LOGGER = logging.getLogger(__name__)
-
-
-class MessageDispatcher(metaclass=ABCMeta):
-    """Base class for the dispatchers."""
-    def __call__(self, *args, **kwargs):
-        self.dispatch(*args, **kwargs)
-
-    @abstractmethod
-    def dispatch(self, message):
-        """Dispatches the message."""
-        pass
-
-
-class DefaultDispatcher(MessageDispatcher):
-    """
-    Dispatcher responsible for dispatching the message to the message handler.
-    """
-
-    def __init__(self,
-                 handler,
-                 serializer,
-                 compression):
-        self._handler = handler
-        self._serializer = serializer
-        self._compression = compression
-
-    def dispatch(self, transport_message):
-        """Dispatches the message."""
-
-        set_transport_message(transport_message)
-
-        try:
-            compression = self._compression or transport_message.headers.get('x-compression')
-            if compression:
-                transport_message.body = decompress(transport_message.body, compression)
-
-            message = loads(
-                transport_message.body,
-                transport_message.content_type,
-                transport_message.content_encoding,
-                self._serializer)
-
-            self._handler.handle(message)
-
-            transport_message.delete()
-        finally:
-            set_transport_message(None)
 
 
 class DispatchMessageStep(PipelineStep):
@@ -95,7 +43,7 @@ class DispatchMessageStep(PipelineStep):
         if context.headers:
             transport_message.headers.update(context.headers)
 
-        transport = self.__get_transport(context.options.get('endpoint'))
+        transport = get_transport(self.__transports, context.options.get('endpoint'))
 
         if context.queue:
             transport.push(context.queue, transport_message, context.options)
@@ -103,16 +51,3 @@ class DispatchMessageStep(PipelineStep):
             transport.publish(context.topic, transport_message, context.options)
 
         next_step()
-
-    def __get_transport(self, endpoint):
-        """Gets the transport for the specified endpoint."""
-
-        if endpoint is None:
-            endpoint = 'default'
-
-        transport = self.__transports.get(endpoint)
-
-        if transport is None:
-            raise RuntimeError("Endpoint '%s' not found" % endpoint)
-
-        return transport

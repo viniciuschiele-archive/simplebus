@@ -14,17 +14,16 @@
 
 """Message bus implementation."""
 
-from .cancellables import Cancellation
-from .cancellables import Subscription
+from .cancellables import Cancellation, Subscription
 from .config import Config
-from .compression import CompressMessageStep
-from .dispatchers import DefaultDispatcher, DispatchMessageStep
-from .handlers import CallbackHandler, MessageHandler
+from .compression import CompressMessageStep, DecompressMessageStep
+from .dispatchers import DispatchMessageStep
+from .handlers import InvokeHandlerStep
 from .pipeline import Pipeline, PipelineContext
-from .serialization import SerializeMessageStep
-from .state import set_current_bus
+from .serialization import DeserializeMessageStep, SerializeMessageStep
+from .state import set_current_bus, set_transport_message
 from .transports import create_transport
-from .utils import create_random_id, Loop
+from .utils import create_random_id, get_transport, Loop
 
 
 class Bus(object):
@@ -39,6 +38,11 @@ class Bus(object):
         self.__queues_cached = {}
         self.__topics_cached = {}
         self.__loop = Loop()
+
+        self.__incoming_pipeline = Pipeline()
+        self.__incoming_pipeline.steps.append(DecompressMessageStep())
+        self.__incoming_pipeline.steps.append(DeserializeMessageStep())
+        self.__incoming_pipeline.steps.append(InvokeHandlerStep())
 
         self.__outgoing_pipeline = Pipeline()
         self.__outgoing_pipeline.steps.append(SerializeMessageStep())
@@ -113,10 +117,8 @@ class Bus(object):
 
         id = create_random_id()
         options = self.__get_queue_options(queue, options)
-        handler = self.__get_handler(callback)
-        dispatcher = DefaultDispatcher(handler, options.get('serializer'), options.get('compression'))
-        transport = self.__get_transport(options.get('endpoint'))
-        transport.pull(id, queue, dispatcher, options)
+        transport = get_transport(self.__transports, options.get('endpoint'))
+        transport.pull(id, queue, self.__transport_receive(callback, options), options)
         return Cancellation(id, transport)
 
     def publish(self, topic, message, **options):
@@ -138,28 +140,14 @@ class Bus(object):
 
         id = create_random_id()
         options = self.__get_topic_options(topic, options)
-        handler = self.__get_handler(callback)
-        dispatcher = DefaultDispatcher(handler, options.get('serializer'), options.get('compression'))
-        transport = self.__get_transport(options.get('endpoint'))
-        transport.subscribe(id, topic, dispatcher, options)
+        transport = get_transport(self.__transports, options.get('endpoint'))
+        transport.subscribe(id, topic, self.__transport_receive(callback, options), options)
         return Subscription(id, transport)
 
     def __ensure_started(self):
         """If the bus is not started it starts."""
         if not self.is_started:
             self.start()
-
-    @staticmethod
-    def __get_handler(callback):
-        """Gets a MessageHandler instance for the specified callback."""
-
-        if isinstance(callback, MessageHandler):
-            return callback
-
-        if callable(callback):
-            return CallbackHandler(callback)
-
-        raise TypeError('Parameter callback must be an instance of MessageHandler or a callable object.')
 
     def __get_queue_options(self, queue, override_options):
         """Gets the options for the specified queue."""
@@ -200,19 +188,6 @@ class Bus(object):
 
         return options
 
-    def __get_transport(self, endpoint):
-        """Gets the transport for the specified endpoint."""
-
-        if endpoint is None:
-            endpoint = 'default'
-
-        transport = self.__transports.get(endpoint)
-
-        if transport is None:
-            raise RuntimeError("Endpoint '%s' not found" % endpoint)
-
-        return transport
-
     def __load_imports(self):
         """Loads the modules configured in the configuration object."""
 
@@ -221,3 +196,20 @@ class Bus(object):
             return
         for module in modules:
             __import__(module)
+
+    def __transport_receive(self, callback, options):
+        def wrapper(transport_message):
+            context = PipelineContext()
+            context.transport_message = transport_message
+            context.callback = callback
+            context.options = options
+
+            set_transport_message(transport_message)
+
+            try:
+                self.__incoming_pipeline.invoke(context)
+
+                transport_message.delete()
+            finally:
+                set_transport_message(None)
+        return wrapper

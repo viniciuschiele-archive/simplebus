@@ -22,6 +22,7 @@ from queue import Empty
 from queue import LifoQueue
 from .errors import LimitedExceeded
 
+
 class ResourcePool(metaclass=ABCMeta):
     """Base class that provides a pool of resources."""
 

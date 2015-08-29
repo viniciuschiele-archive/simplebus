@@ -18,23 +18,21 @@ Message Handler is used to process a message received.
 
 from abc import ABCMeta
 from abc import abstractmethod
+from .pipeline import PipelineStep
+
+
+class InvokeHandlerStep(PipelineStep):
+    def invoke(self, context, next_step):
+        context.callback(context.message)
 
 
 class MessageHandler(metaclass=ABCMeta):
     """Defines a message handler."""
 
+    def __call__(self, *args, **kwargs):
+        self.handle(*args, **kwargs)
+
     @abstractmethod
     def handle(self, message):
         """Handles a message."""
         pass
-
-
-class CallbackHandler(MessageHandler):
-    """Message handler that calls a method."""
-
-    def __init__(self, callback):
-        self.__callback = callback
-
-    def handle(self, message):
-        """Handles a message calling a method."""
-        self.__callback(message)

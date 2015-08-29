@@ -17,8 +17,8 @@
 import datetime
 import uuid
 
-from simplebus import transport_message
 from simplebus import MessageHandler
+from simplebus import transport_message
 from simplebus import pull
 from tests import create_bus
 from unittest import TestCase

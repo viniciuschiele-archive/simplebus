@@ -245,6 +245,18 @@ class PickleSerializer(Serializer):
             raise SerializationError(str(e))
 
 
+class DeserializeMessageStep(PipelineStep):
+    def invoke(self, context, next_step):
+        transport_message = context.transport_message
+
+        context.message = registry.loads(transport_message.body,
+                                         transport_message.content_type,
+                                         transport_message.content_encoding,
+                                         context.options.get('serializer'))
+
+        next_step()
+
+
 class SerializeMessageStep(PipelineStep):
     def invoke(self, context, next_step):
         content_type, content_encoding, body = \
@@ -263,8 +275,3 @@ registry.register('pickle', PickleSerializer())
 
 if msgpack:
     registry.register('msgpack', MsgPackSerializer())
-
-
-def loads(body, content_type, content_encoding, serializer=None):
-    """Deserializes the specified body using the specified serializer."""
-    return registry.loads(body, content_type, content_encoding, serializer)
