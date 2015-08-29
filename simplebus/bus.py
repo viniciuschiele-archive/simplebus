@@ -39,15 +39,15 @@ class Bus(object):
         self.__topics_cached = {}
         self.__loop = Loop()
 
-        self.__incoming_pipeline = Pipeline()
-        self.__incoming_pipeline.steps.append(DecompressMessageStep())
-        self.__incoming_pipeline.steps.append(DeserializeMessageStep())
-        self.__incoming_pipeline.steps.append(InvokeHandlerStep())
+        self.incoming_pipeline = Pipeline()
+        self.incoming_pipeline.steps.append(DecompressMessageStep())
+        self.incoming_pipeline.steps.append(DeserializeMessageStep())
+        self.incoming_pipeline.steps.append(InvokeHandlerStep())
 
-        self.__outgoing_pipeline = Pipeline()
-        self.__outgoing_pipeline.steps.append(SerializeMessageStep())
-        self.__outgoing_pipeline.steps.append(CompressMessageStep())
-        self.__outgoing_pipeline.steps.append(DispatchMessageStep(self.__transports))
+        self.outgoing_pipeline = Pipeline()
+        self.outgoing_pipeline.steps.append(SerializeMessageStep())
+        self.outgoing_pipeline.steps.append(CompressMessageStep())
+        self.outgoing_pipeline.steps.append(DispatchMessageStep(self.__transports))
 
         self.config = Config()
 
@@ -108,7 +108,7 @@ class Bus(object):
         context.message = message
         context.options = self.__get_queue_options(queue, options)
 
-        self.__outgoing_pipeline.invoke(context)
+        self.outgoing_pipeline.invoke(context)
 
     def pull(self, queue, callback, **options):
         """Starts receiving messages from the specified queue."""
@@ -131,7 +131,7 @@ class Bus(object):
         context.message = message
         context.options = self.__get_topic_options(topic, options)
 
-        self.__outgoing_pipeline.invoke(context)
+        self.outgoing_pipeline.invoke(context)
 
     def subscribe(self, topic, callback, **options):
         """Subscribes to receive published messages to the specified topic."""
@@ -207,7 +207,7 @@ class Bus(object):
             set_transport_message(transport_message)
 
             try:
-                self.__incoming_pipeline.invoke(context)
+                self.incoming_pipeline.invoke(context)
 
                 transport_message.delete()
             finally:

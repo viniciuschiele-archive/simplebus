@@ -1,5 +1,10 @@
 # Changelog
 
+### Version 1.1.0
+ - Added incoming and outgoing messaging pipeline.
+ - Removed MessageDispatcher and DefaultDispatcher classes
+
+
 ### Version 1.0.1
  - Fixed bug in retry logic.
  - Moved retry logic to the transport level.
