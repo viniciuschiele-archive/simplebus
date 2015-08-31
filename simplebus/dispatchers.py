@@ -29,6 +29,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 class DispatchMessageStep(PipelineStep):
+    id = 'DispatchMessage'
+
     def __init__(self, transports):
         self.__transports = transports
 

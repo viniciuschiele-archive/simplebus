@@ -15,31 +15,35 @@
 """This module contains all exceptions used by the SimpleBus API."""
 
 
-class NoRetryError(Exception):
+class SimpleBusError(Exception):
+    pass
+
+
+class NoRetryError(SimpleBusError):
     """Notifies to the Bus to do not retry the current message."""
     pass
 
 
-class SerializationError(Exception):
+class SerializationError(SimpleBusError):
     """Serialize or deserialize has failed."""
     pass
 
 
-class SerializerNotFoundError(Exception):
+class SerializerNotFoundError(SimpleBusError):
     """Serializer not found."""
     pass
 
 
-class CompressionError(Exception):
+class CompressionError(SimpleBusError):
     """Compress or decompress has failed."""
     pass
 
 
-class CompressionNotFoundError(Exception):
+class CompressionNotFoundError(SimpleBusError):
     """Compression not found."""
     pass
 
 
-class LimitedExceeded(Exception):
+class LimitedExceeded(SimpleBusError):
     """Resources were exceeded."""
     pass

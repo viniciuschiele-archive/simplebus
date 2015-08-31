@@ -113,19 +113,9 @@ class GzipCompressor(Compressor):
             raise CompressionError(e)
 
 
-class DecompressMessageStep(PipelineStep):
-    def invoke(self, context, next_step):
-        transport_message = context.transport_message
-
-        compression = context.options.get('compression') or transport_message.headers.get('x-compression')
-
-        if compression:
-            transport_message.body = registry.decompress(transport_message.body, compression)
-
-        next_step()
-
-
 class CompressMessageStep(PipelineStep):
+    id = 'CompressMessage'
+
     def invoke(self, context, next_step):
         compression = context.options.get('compression')
         if compression:
@@ -135,6 +125,20 @@ class CompressMessageStep(PipelineStep):
             algorithm, message = registry.compress(context.message, compression)
             context.headers['x-compression'] = algorithm
             context.message = message
+
+        next_step()
+
+
+class DecompressMessageStep(PipelineStep):
+    id = 'DecompressMessage'
+
+    def invoke(self, context, next_step):
+        transport_message = context.transport_message
+
+        compression = context.options.get('compression') or transport_message.headers.get('x-compression')
+
+        if compression:
+            transport_message.body = registry.decompress(transport_message.body, compression)
 
         next_step()
 

@@ -40,14 +40,14 @@ class Bus(object):
         self.__loop = Loop()
 
         self.incoming_pipeline = Pipeline()
-        self.incoming_pipeline.steps.append(DecompressMessageStep())
-        self.incoming_pipeline.steps.append(DeserializeMessageStep())
-        self.incoming_pipeline.steps.append(InvokeHandlerStep())
+        self.incoming_pipeline.add_step(DecompressMessageStep())
+        self.incoming_pipeline.add_step(DeserializeMessageStep())
+        self.incoming_pipeline.add_step(InvokeHandlerStep())
 
         self.outgoing_pipeline = Pipeline()
-        self.outgoing_pipeline.steps.append(SerializeMessageStep())
-        self.outgoing_pipeline.steps.append(CompressMessageStep())
-        self.outgoing_pipeline.steps.append(DispatchMessageStep(self.__transports))
+        self.outgoing_pipeline.add_step(SerializeMessageStep())
+        self.outgoing_pipeline.add_step(CompressMessageStep())
+        self.outgoing_pipeline.add_step(DispatchMessageStep(self.__transports))
 
         self.config = Config()
 
@@ -81,6 +81,9 @@ class Bus(object):
             transport.open()
             self.__transports[key] = transport
 
+        self.incoming_pipeline.start()
+        self.outgoing_pipeline.start()
+
         self.__started = True
 
         set_current_bus(self)
@@ -91,6 +94,9 @@ class Bus(object):
         """Stops the bus."""
 
         self.__started = False
+
+        self.incoming_pipeline.stop()
+        self.outgoing_pipeline.stop()
 
         for transport in self.__transports.values():
             transport.close()

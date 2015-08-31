@@ -22,6 +22,8 @@ from .pipeline import PipelineStep
 
 
 class InvokeHandlerStep(PipelineStep):
+    id = 'invoke_handler'
+
     def invoke(self, context, next_step):
         context.callback(context.message)
 
