@@ -19,53 +19,25 @@ import zlib
 from abc import ABCMeta
 from abc import abstractmethod
 from .errors import CompressionError
-from .errors import CompressionNotFoundError
 from .pipeline import PipelineStep
 
 
-class CompressorRegistry(object):
-    """Stores the compressors used by simplebus."""
+def get_compressor(compressors, name):
+    """Gets the compressor by the name."""
 
-    def __init__(self):
-        self.__compressors = {}
+    compressor = compressors.get(name)
+    if compressor:
+        return compressor
+    raise CompressionError("Compression '%s' not found." % name)
 
-    def register(self, name, compressor):
-        """Register a new compressor."""
-        self.__compressors[name] = compressor
 
-    def unregister(self, name):
-        """Unregister the specified compressor."""
-        self.__compressors.pop(name)
+def find_compressor(compressors, content_encoding):
+    """Gets the compressor by the content type."""
 
-    def get(self, name):
-        """Gets the compressor by the name."""
-
-        compressor = self.__compressors.get(name)
-        if compressor:
+    for compressor in compressors.values():
+        if compressor.content_encoding == content_encoding:
             return compressor
-        raise CompressionNotFoundError("Compression '%s' not found." % name)
-
-    def find(self, content_type):
-        """Gets the compressor by the content type."""
-
-        for compressor in self.__compressors.values():
-            if compressor.content_type == content_type:
-                return compressor
-        raise CompressionNotFoundError("Compression '%s' not found." % content_type)
-
-    def compress(self, body, compression):
-        """Compress the specified body using the specified compression."""
-
-        compressor = self.get(compression)
-        return compressor.content_type, compressor.compress(body)
-
-    def decompress(self, body, content_type, compression=None):
-        """Decompress the specified body using the specified compression."""
-
-        if compression:
-            return self.get(compression).decompress(body)
-
-        return self.find(content_type).decompress(body)
+    raise CompressionError("Compression '%s' not found." % content_encoding)
 
 
 class Compressor(metaclass=ABCMeta):
@@ -73,8 +45,8 @@ class Compressor(metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def content_type(self):
-        """Gets the content type used to compress."""
+    def content_encoding(self):
+        """Gets the content encoding used to compress."""
         pass
 
     @abstractmethod
@@ -92,39 +64,35 @@ class GzipCompressor(Compressor):
     """Gzip compressor."""
 
     @property
-    def content_type(self):
-        """Gets the content type used to compress."""
-        return 'application/x-gzip'
+    def content_encoding(self):
+        """Gets the content encoding used to compress."""
+        return 'gzip'
 
     def compress(self, body):
         """Compress the specified body."""
-
-        try:
-            return zlib.compress(body)
-        except Exception as e:
-            raise CompressionError(e)
+        return zlib.compress(body)
 
     def decompress(self, body):
         """Decompress the specified body."""
-
-        try:
-            return zlib.decompress(body)
-        except Exception as e:
-            raise CompressionError(e)
+        return zlib.decompress(body)
 
 
 class CompressMessageStep(PipelineStep):
     id = 'CompressMessage'
 
+    def __init__(self, compressors):
+        self.__compressors = compressors
+
     def invoke(self, context, next_step):
         compression = context.options.get('compression')
         if compression:
-            if context.headers is None:
-                context.headers = {}
+            compressor = get_compressor(self.__compressors, compression)
 
-            algorithm, message = registry.compress(context.message, compression)
-            context.headers['x-compression'] = algorithm
-            context.message = message
+            try:
+                context.message = compressor.compress(context.message)
+                context.content_encoding = compressor.content_encoding
+            except Exception as e:
+                raise CompressionError(e)
 
         next_step()
 
@@ -132,16 +100,23 @@ class CompressMessageStep(PipelineStep):
 class DecompressMessageStep(PipelineStep):
     id = 'DecompressMessage'
 
+    def __init__(self, compressors):
+        self.__compressors = compressors
+
     def invoke(self, context, next_step):
         transport_message = context.transport_message
 
-        compression = context.options.get('compression') or transport_message.headers.get('x-compression')
+        compressor = None
 
-        if compression:
-            transport_message.body = registry.decompress(transport_message.body, compression)
+        if context.options.get('compression'):
+            compressor = get_compressor(self.__compressors, context.options.get('compression'))
+        elif transport_message.content_encoding:
+            compressor = find_compressor(self.__compressors, transport_message.content_encoding)
+
+        if compressor:
+            try:
+                transport_message.body = compressor.decompress(transport_message.body)
+            except Exception as e:
+                raise CompressionError(e)
 
         next_step()
-
-
-registry = CompressorRegistry()
-registry.register('gzip', GzipCompressor())

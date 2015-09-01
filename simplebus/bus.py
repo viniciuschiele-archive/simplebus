@@ -16,7 +16,7 @@
 
 from .cancellables import Cancellation, Subscription
 from .config import Config
-from .compression import CompressMessageStep, DecompressMessageStep
+from .compression import CompressMessageStep, DecompressMessageStep, GzipCompressor
 from .dispatchers import DispatchMessageStep
 from .handlers import InvokeHandlerStep
 from .pipeline import Pipeline, PipelineContext
@@ -36,19 +36,22 @@ class Bus(object):
         self.__topic_options = {}
         self.__started = False
         self.__transports = {}
+        self.__compressors = {}
         self.__queues_cached = {}
         self.__topics_cached = {}
         self.__loop = Loop()
 
+        self.add_compressor('gzip', GzipCompressor())
+
         self.incoming_pipeline = Pipeline()
-        self.incoming_pipeline.add_step(DecompressMessageStep())
+        self.incoming_pipeline.add_step(DecompressMessageStep(self.__compressors))
         self.incoming_pipeline.add_step(DeserializeMessageStep())
         self.incoming_pipeline.add_step(RetryMessageStep())
         self.incoming_pipeline.add_step(InvokeHandlerStep())
 
         self.outgoing_pipeline = Pipeline()
         self.outgoing_pipeline.add_step(SerializeMessageStep())
-        self.outgoing_pipeline.add_step(CompressMessageStep())
+        self.outgoing_pipeline.add_step(CompressMessageStep(self.__compressors))
         self.outgoing_pipeline.add_step(DispatchMessageStep(self.__transports))
 
         self.config = Config()
@@ -105,6 +108,9 @@ class Bus(object):
         self.__transports.clear()
 
         set_current_bus(None)
+
+    def add_compressor(self, name, compressor):
+        self.__compressors[name] = compressor
 
     def push(self, queue, message, **options):
         """Sends a message to the specified queue."""
@@ -216,8 +222,7 @@ class Bus(object):
 
             try:
                 self.incoming_pipeline.invoke(context)
-
-                transport_message.delete()
             finally:
+                transport_message.delete()
                 set_transport_message(None)
         return wrapper

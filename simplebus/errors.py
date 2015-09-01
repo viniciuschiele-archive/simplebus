@@ -19,6 +19,11 @@ class SimpleBusError(Exception):
     pass
 
 
+class CompressionError(SimpleBusError):
+    """Compress or decompress has failed."""
+    pass
+
+
 class NoRetryError(SimpleBusError):
     """Notifies to the Bus to do not retry the current message."""
     pass
@@ -31,16 +36,6 @@ class SerializationError(SimpleBusError):
 
 class SerializerNotFoundError(SimpleBusError):
     """Serializer not found."""
-    pass
-
-
-class CompressionError(SimpleBusError):
-    """Compress or decompress has failed."""
-    pass
-
-
-class CompressionNotFoundError(SimpleBusError):
-    """Compression not found."""
     pass
 
 

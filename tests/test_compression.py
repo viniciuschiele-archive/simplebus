@@ -14,29 +14,58 @@
 
 """Unit tests."""
 
-from simplebus.errors import CompressionNotFoundError
+from simplebus.compression import CompressMessageStep, DecompressMessageStep, GzipCompressor
 from simplebus.errors import CompressionError
-from simplebus.compression import CompressorRegistry
-from simplebus.compression import GzipCompressor
+from simplebus.transports.base import TransportMessage
+from simplebus.pipeline import PipelineContext
 from unittest import TestCase
 
 
-class TestCompression(TestCase):
+class TestCompressionStep(TestCase):
     def setUp(self):
-        self.registry = CompressorRegistry()
-        self.registry.register('gzip', GzipCompressor())
+        self.compress_step = CompressMessageStep({'gzip': GzipCompressor()})
+        self.decompress_step = DecompressMessageStep({'gzip': GzipCompressor()})
+
+    def __dummy_step(self):
+        pass
 
     def test_invalid_body(self):
-        self.assertRaises(CompressionError, self.registry.compress, dict(property=1), 'gzip')
-        self.assertRaises(CompressionError, self.registry.decompress, dict(property=1), None, 'gzip')
+        context = PipelineContext()
+        context.message = dict(property=1)
+        context.options = {'compression': 'gzip'}
+        self.assertRaises(CompressionError, self.compress_step.invoke, context, self.__dummy_step)
+
+        context = PipelineContext()
+        context.transport_message = TransportMessage(content_encoding='gzip', body='invalid body')
+        context.options = {}
+        self.assertRaises(CompressionError, self.decompress_step.invoke, context, self.__dummy_step)
 
     def test_gzip_compression(self):
-        content_type, body = self.registry.compress(b'hello', 'gzip')
-        self.assertEqual('application/x-gzip', content_type)
-        self.assertEqual(b'hello', self.registry.decompress(body, content_type))
-        self.assertEqual(b'hello', self.registry.decompress(body, None, 'gzip'))
+        context = PipelineContext()
+        context.message = b'hello'
+        context.options = {'compression': 'gzip'}
+        self.compress_step.invoke(context, self.__dummy_step)
+
+        self.assertEqual('gzip', context.content_encoding)
+        self.assertIsNot(b'hello', context.message)
+
+        context2 = PipelineContext()
+        context2.transport_message = TransportMessage(content_encoding=context.content_encoding, body=context.message)
+        context2.options = {}
+        self.decompress_step.invoke(context2, self.__dummy_step)
+
+        self.assertEqual(b'hello', context2.transport_message.body)
 
     def test_not_found(self):
-        self.assertRaises(CompressionNotFoundError, self.registry.compress, 'hello', 'unknown')
-        self.assertRaises(CompressionNotFoundError, self.registry.decompress, 'hello', 'unknown')
-        self.assertRaises(CompressionNotFoundError, self.registry.decompress, 'hello', '', 'unknown')
+        context = PipelineContext()
+        context.options = {'compression': 'unknown'}
+        self.assertRaises(CompressionError, self.compress_step.invoke, context, self.__dummy_step)
+
+        context = PipelineContext()
+        context.options = {'compression': 'unknown'}
+        self.assertRaises(CompressionError, self.decompress_step.invoke, context, self.__dummy_step)
+
+        context = PipelineContext()
+        context.transport_message = TransportMessage(content_encoding='unknown')
+        context.options = {}
+        self.assertRaises(CompressionError, self.decompress_step.invoke, context, self.__dummy_step)

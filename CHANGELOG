@@ -1,11 +1,13 @@
 # Changelog
 
-### Version 1.1.0 (next)
+### Version 2.0.0 (next)
  - Added incoming and outgoing messaging pipeline.
  - Removed MessageDispatcher and DefaultDispatcher classes.
  - retry attribute has been removed.
  - max_retries set to 0 by default.
  - retry_delay set to 0 by default.
+ - Compression classes has been refactored, breaking compatibility.
+   - Added the method add_compressor in the Bus class to add a compression algorithm.
 
 ### Version 1.0.1
  - Fixed bug in retry logic.
