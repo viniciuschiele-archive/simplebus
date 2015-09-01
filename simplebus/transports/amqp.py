@@ -23,9 +23,9 @@ except ImportError:
 import logging
 import uuid
 
-from threading import Lock
-from threading import Thread
+from threading import Lock, Thread
 from urllib import parse
+from ..errors import MaxRetriesExceeded
 from ..pools import ResourcePool
 from ..transports import base
 from ..utils import EventHandler
@@ -206,12 +206,13 @@ class Transport(base.Transport):
 
 
 class TransportMessage(base.TransportMessage):
-    def __init__(self, message, dead_letter_queue=None, retry_queue=None):
+    def __init__(self, message, dead_letter_queue=None, retry_queue=None, max_retries=None):
         super().__init__()
 
         self.__message = message
         self.__dead_letter_queue = dead_letter_queue
         self.__retry_queue = retry_queue
+        self.__max_retries = max_retries
 
         self.app_id = message.app_id
         self.message_id = message.message_id
@@ -240,7 +241,6 @@ class TransportMessage(base.TransportMessage):
         if not self.__dead_letter_queue:
             return
 
-        self.__set_header_retry_count(0)
         self.__set_header_death_reason(reason)
 
         self.__message.publish(self.__dead_letter_queue, '')
@@ -250,15 +250,17 @@ class TransportMessage(base.TransportMessage):
         if not self.__message:
             return
 
+        if self.retry_count >= self.__max_retries:
+            raise MaxRetriesExceeded()
+
         self.__set_header_retry_count(self.retry_count + 1)
 
         if self.__retry_queue:
             routing_key = self.__retry_queue
             exchange = ''
         else:
-            method = self.__message.method
-            routing_key = method.get('routing_key')
-            exchange = method.get('exchange')
+            routing_key = self.__message.method.get('routing_key')
+            exchange = self.__message.method.get('exchange')
 
         self.__message.ack()
         self.__message.publish(routing_key, exchange)
@@ -301,7 +303,6 @@ class Puller(object):
         self.__channels = []
 
         self.__dead_letter = options.get('dead_letter')
-        self.__retry = options.get('retry')
         self.__max_retries = options.get('max_retries')
         self.__retry_delay = options.get('retry_delay')
         self.__max_concurrency = options.get('max_concurrency')
@@ -313,7 +314,7 @@ class Puller(object):
         if self.__dead_letter:
             self.__dead_letter_queue = queue + '.error'
 
-        if self.__retry:
+        if self.__max_retries > 0:
             self.__retry_queue = queue
             if self.__retry_delay > 0:
                 self.__retry_queue += '.retry'
@@ -324,7 +325,7 @@ class Puller(object):
         if self.__dead_letter:
             self.__create_dead_letter_queue(self.__dead_letter_queue)
 
-        if self.__retry and self.__retry_delay > 0:
+        if self.__max_retries > 0 and self.__retry_delay > 0:
             self.__create_retry_queue(self.__queue, self.__retry_queue, self.__retry_delay)
 
         for i in range(self.__max_concurrency):
@@ -346,15 +347,11 @@ class Puller(object):
 
     def __on_message(self, message):
         try:
-            transport_message = TransportMessage(message, self.__dead_letter_queue, self.__retry_queue)
-
-            try:
-                self.__callback(transport_message)
-            except Exception as e:
-                if self.__retry and transport_message.retry_count < self.__max_retries:
-                    transport_message.retry()
-                else:
-                    transport_message.dead_letter(str(e))
+            transport_message = TransportMessage(message,
+                                                 self.__dead_letter_queue,
+                                                 self.__retry_queue,
+                                                 self.__max_retries)
+            self.__callback(transport_message)
         except:
             LOGGER.exception("Puller failed, queue '%s'." % self.__queue)
 

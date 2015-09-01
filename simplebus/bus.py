@@ -20,6 +20,7 @@ from .compression import CompressMessageStep, DecompressMessageStep
 from .dispatchers import DispatchMessageStep
 from .handlers import InvokeHandlerStep
 from .pipeline import Pipeline, PipelineContext
+from .recoverability import RetryMessageStep
 from .serialization import DeserializeMessageStep, SerializeMessageStep
 from .state import set_current_bus, set_transport_message
 from .transports import create_transport
@@ -42,6 +43,7 @@ class Bus(object):
         self.incoming_pipeline = Pipeline()
         self.incoming_pipeline.add_step(DecompressMessageStep())
         self.incoming_pipeline.add_step(DeserializeMessageStep())
+        self.incoming_pipeline.add_step(RetryMessageStep())
         self.incoming_pipeline.add_step(InvokeHandlerStep())
 
         self.outgoing_pipeline = Pipeline()

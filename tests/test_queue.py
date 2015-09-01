@@ -116,7 +116,7 @@ class TestQueue(TestCase):
             self.assertEqual(key, message)
             self.bus.loop.stop()
 
-        self.bus.pull(self.queue, handle, dead_letter=True, retry=True, max_retries=2, retry_delay=0)
+        self.bus.pull(self.queue, handle, dead_letter=True, max_retries=2, retry_delay=0)
         self.bus.pull(self.queue + '.error', handle_error)
         self.bus.push(self.queue, key)
         self.bus.loop.start()
@@ -137,7 +137,7 @@ class TestQueue(TestCase):
             finally:
                 self.bus.loop.stop()
 
-        self.bus.pull(self.queue, handle, retry=True, max_retries=1, retry_delay=200)
+        self.bus.pull(self.queue, handle, max_retries=1, retry_delay=200)
         self.bus.push(self.queue, 'hello')
         self.bus.loop.start()
 
