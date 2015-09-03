@@ -36,7 +36,7 @@ class Bus(object):
         self.__topic_options = {}
         self.__started = False
         self.__transports = {}
-        self.__compressors = {}
+        self.__compressors = []
         self.__queues_cached = {}
         self.__topics_cached = {}
         self.__loop = Loop()
@@ -110,7 +110,7 @@ class Bus(object):
         set_current_bus(None)
 
     def add_compressor(self, name, compressor):
-        self.__compressors[name] = compressor
+        self.__compressors.append((name, compressor))
 
     def push(self, queue, message, **options):
         """Sends a message to the specified queue."""

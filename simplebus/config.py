@@ -39,7 +39,8 @@ class Config(object):
             'expiration': None,
             'max_concurrency': 1,
             'prefetch_count': 10,
-            'compression': None,
+            'compressor': None,
+            'decompressor': None,
             'serializer': 'json',
         }
     }

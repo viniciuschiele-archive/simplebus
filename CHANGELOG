@@ -8,6 +8,8 @@
  - retry_delay set to 0 by default.
  - Compression classes has been refactored, breaking compatibility.
    - Added the method add_compressor in the Bus class to add a compression algorithm.
+ - Attribute compression has been renamed to compressor
+ - Added new attribute called decompressor
 
 ### Version 1.0.1
  - Fixed bug in retry logic.
