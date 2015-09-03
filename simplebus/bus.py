@@ -14,9 +14,11 @@
 
 """Message bus implementation."""
 
+import zlib
+
 from .cancellables import Cancellation, Subscription
 from .config import Config
-from .compression import CompressMessageStep, DecompressMessageStep, GzipCompressor
+from .compression import CompressMessageStep, DecompressMessageStep
 from .dispatchers import DispatchMessageStep
 from .handlers import InvokeHandlerStep
 from .pipeline import Pipeline, PipelineContext
@@ -37,11 +39,13 @@ class Bus(object):
         self.__started = False
         self.__transports = {}
         self.__compressors = []
+        self.__decompressors = []
         self.__queues_cached = {}
         self.__topics_cached = {}
         self.__loop = Loop()
 
-        self.add_compressor('gzip', GzipCompressor())
+        self.add_compressor('gzip', zlib.compress)
+        self.add_decompressor('gzip', zlib.decompress)
 
         self.incoming_pipeline = Pipeline()
         self.incoming_pipeline.add_step(DecompressMessageStep(self.__compressors))
@@ -109,8 +113,11 @@ class Bus(object):
 
         set_current_bus(None)
 
-    def add_compressor(self, name, compressor):
-        self.__compressors.append((name, compressor))
+    def add_compressor(self, name, encoder):
+        self.__compressors.append((name, encoder))
+
+    def add_decompressor(self, name, decoder):
+        self.__decompressors.append((name, decoder))
 
     def push(self, queue, message, **options):
         """Sends a message to the specified queue."""

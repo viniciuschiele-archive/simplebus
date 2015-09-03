@@ -14,36 +14,41 @@
 
 """Implements the compression related objects."""
 
-import zlib
-
-from abc import ABCMeta
-from abc import abstractmethod
 from .errors import CompressionError
 from .pipeline import PipelineStep
 
 
-def get_compressor(compressors, name):
+def _get_compressor(compressors, name):
     """Gets the compressor by the name."""
 
-    for n, compressor in compressors:
+    for n, f in compressors:
         if n == name:
-            return compressor
-    raise CompressionError("Compression '%s' not found." % name)
+            return f
+    raise CompressionError("Compressor '%s' not found." % name)
+
+
+def _get_decompressor(decompressors, name):
+    """Gets the decompressor by the name."""
+
+    for n, f in decompressors:
+        if n == name:
+            return f
+    raise CompressionError("Decompressor '%s' not found." % name)
 
 
 class CompressMessageStep(PipelineStep):
     id = 'CompressMessage'
 
-    def __init__(self, compressors):
-        self.__compressors = compressors
+    def __init__(self, compressions):
+        self.__compressions = compressions
 
     def invoke(self, context, next_step):
         name = context.options.get('compressor')
         if name:
-            compressor = get_compressor(self.__compressors, name)
+            compress = _get_compressor(self.__compressions, name)
 
             try:
-                context.message = compressor.compress(context.message)
+                context.message = compress(context.message)
                 context.content_encoding = name
             except Exception as e:
                 raise CompressionError(e)
@@ -54,8 +59,8 @@ class CompressMessageStep(PipelineStep):
 class DecompressMessageStep(PipelineStep):
     id = 'DecompressMessage'
 
-    def __init__(self, compressors):
-        self.__compressors = compressors
+    def __init__(self, compressions):
+        self.__compressions = compressions
 
     def invoke(self, context, next_step):
         transport_message = context.transport_message
@@ -63,37 +68,11 @@ class DecompressMessageStep(PipelineStep):
         name = context.options.get('decompressor') or transport_message.content_encoding
 
         if name:
-            compressor = get_compressor(self.__compressors, name)
+            decompress = _get_decompressor(self.__compressions, name)
 
             try:
-                transport_message.body = compressor.decompress(transport_message.body)
+                transport_message.body = decompress(transport_message.body)
             except Exception as e:
                 raise CompressionError(e)
 
         next_step()
-
-
-class Compressor(metaclass=ABCMeta):
-    """Base class for a compressor."""
-
-    @abstractmethod
-    def compress(self, data):
-        """Compress the specified body."""
-        pass
-
-    @abstractmethod
-    def decompress(self, data):
-        """Decompress the specified body."""
-        pass
-
-
-class GzipCompressor(Compressor):
-    """Gzip compressor."""
-
-    def compress(self, data):
-        """Compress the specified body."""
-        return zlib.compress(data)
-
-    def decompress(self, data):
-        """Decompress the specified body."""
-        return zlib.decompress(data)
