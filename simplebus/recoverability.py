@@ -3,7 +3,7 @@ from .pipeline import PipelineStep
 
 
 class RetryMessageStep(PipelineStep):
-    id = 'RetryStep'
+    id = 'RetryMessage'
 
     def invoke(self, context, next_step):
         try:
