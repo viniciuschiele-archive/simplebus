@@ -14,41 +14,24 @@
 
 """Implements the compression related objects."""
 
+import zlib
+
 from .errors import CompressionError
 from .pipeline import PipelineStep
-
-
-def _get_compressor(compressors, name):
-    """Gets the compressor by the name."""
-
-    for n, f in compressors:
-        if n == name:
-            return f
-    raise CompressionError("Compressor '%s' not found." % name)
-
-
-def _get_decompressor(decompressors, name):
-    """Gets the decompressor by the name."""
-
-    for n, f in decompressors:
-        if n == name:
-            return f
-    raise CompressionError("Decompressor '%s' not found." % name)
 
 
 class CompressMessageStep(PipelineStep):
     id = 'CompressMessage'
 
-    def __init__(self, compressions):
-        self.__compressions = compressions
+    def __init__(self, compressors):
+        self.__compressors = compressors
 
     def invoke(self, context, next_step):
         name = context.options.get('compressor')
         if name:
-            compress = _get_compressor(self.__compressions, name)
-
             try:
-                context.message = compress(context.message)
+                compressor = self.__compressors.get(name)
+                context.message = compressor[0](context.message)
                 context.content_encoding = name
             except Exception as e:
                 raise CompressionError(e)
@@ -59,20 +42,37 @@ class CompressMessageStep(PipelineStep):
 class DecompressMessageStep(PipelineStep):
     id = 'DecompressMessage'
 
-    def __init__(self, compressions):
-        self.__compressions = compressions
+    def __init__(self, compressors):
+        self.__compressors = compressors
 
     def invoke(self, context, next_step):
         transport_message = context.transport_message
 
-        name = context.options.get('decompressor') or transport_message.content_encoding
-
-        if name:
-            decompress = _get_decompressor(self.__compressions, name)
+        if transport_message.content_encoding:
+            compressor = self.__compressors.get(transport_message.content_encoding)
 
             try:
-                transport_message.body = decompress(transport_message.body)
+                transport_message.body = compressor[1](transport_message.body)
             except Exception as e:
                 raise CompressionError(e)
 
         next_step()
+
+
+class CompressorRegistry(object):
+    def __init__(self):
+        self.__compressors = {}
+        self.add('gzip', zlib.compress, zlib.decompress)
+
+    def add(self, name, compress, decompress):
+        self.__compressors[name] = (compress, decompress)
+
+    def get(self, name):
+        compressor = self.__compressors.get(name)
+        if compressor:
+            return compressor
+        raise CompressionError("Compressor '%s' not found." % name)
+
+    def remove(self, name):
+        self.__compressors.pop(name)
+
