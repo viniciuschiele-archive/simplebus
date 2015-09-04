@@ -39,10 +39,10 @@ class DeserializeMessageStep(PipelineStep):
     def invoke(self, context, next_step):
         transport_message = context.transport_message
 
-        if context.options.get('serializer'):
-            serializer = self.__serializers.get(context.options.get('serializer'))
-        elif transport_message.content_type:
+        if transport_message.content_type:
             serializer = self.__serializers.find(transport_message.content_type)
+        elif context.options.get('serializer'):
+            serializer = self.__serializers.get(context.options.get('serializer'))
         else:
             serializer = self.__serializers.first()
 
