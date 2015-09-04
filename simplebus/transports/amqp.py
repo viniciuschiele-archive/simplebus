@@ -206,7 +206,7 @@ class Transport(base.Transport):
 
 
 class TransportMessage(base.TransportMessage):
-    def __init__(self, message, dead_letter_queue=None, retry_queue=None, max_retries=None):
+    def __init__(self, message, dead_letter_queue=None, retry_queue=None, max_retries=0):
         super().__init__()
 
         self.__message = message
