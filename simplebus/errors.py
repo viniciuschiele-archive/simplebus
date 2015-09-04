@@ -34,11 +34,6 @@ class SerializationError(SimpleBusError):
     pass
 
 
-class SerializerNotFoundError(SimpleBusError):
-    """Serializer not found."""
-    pass
-
-
 class LimitedExceeded(SimpleBusError):
     """Resources were exceeded."""
     pass

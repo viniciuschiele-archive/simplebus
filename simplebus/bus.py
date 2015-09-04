@@ -14,16 +14,14 @@
 
 """Message bus implementation."""
 
-import zlib
-
 from .cancellables import Cancellation, Subscription
 from .config import Config
-from .compression import CompressMessageStep, DecompressMessageStep
+from .compression import CompressMessageStep, DecompressMessageStep, CompressorRegistry
 from .dispatchers import DispatchMessageStep
 from .handlers import InvokeHandlerStep
 from .pipeline import Pipeline, PipelineContext
 from .recoverability import RetryMessageStep
-from .serialization import DeserializeMessageStep, SerializeMessageStep
+from .serialization import DeserializeMessageStep, SerializeMessageStep, SerializerRegistry
 from .state import set_current_bus, set_transport_message
 from .transports import create_transport
 from .utils import create_random_id, get_transport, Loop
@@ -38,24 +36,22 @@ class Bus(object):
         self.__topic_options = {}
         self.__started = False
         self.__transports = {}
-        self.__compressors = []
-        self.__decompressors = []
         self.__queues_cached = {}
         self.__topics_cached = {}
         self.__loop = Loop()
 
-        self.add_compressor('gzip', zlib.compress)
-        self.add_decompressor('gzip', zlib.decompress)
+        self.compressors = CompressorRegistry()
+        self.serializers = SerializerRegistry()
 
         self.incoming_pipeline = Pipeline()
-        self.incoming_pipeline.add_step(DecompressMessageStep(self.__compressors))
-        self.incoming_pipeline.add_step(DeserializeMessageStep())
+        self.incoming_pipeline.add_step(DecompressMessageStep(self.compressors))
+        self.incoming_pipeline.add_step(DeserializeMessageStep(self.serializers))
         self.incoming_pipeline.add_step(RetryMessageStep())
         self.incoming_pipeline.add_step(InvokeHandlerStep())
 
         self.outgoing_pipeline = Pipeline()
-        self.outgoing_pipeline.add_step(SerializeMessageStep())
-        self.outgoing_pipeline.add_step(CompressMessageStep(self.__compressors))
+        self.outgoing_pipeline.add_step(SerializeMessageStep(self.serializers))
+        self.outgoing_pipeline.add_step(CompressMessageStep(self.compressors))
         self.outgoing_pipeline.add_step(DispatchMessageStep(self.__transports))
 
         self.config = Config()
@@ -112,12 +108,6 @@ class Bus(object):
         self.__transports.clear()
 
         set_current_bus(None)
-
-    def add_compressor(self, name, encoder):
-        self.__compressors.append((name, encoder))
-
-    def add_decompressor(self, name, decoder):
-        self.__decompressors.append((name, decoder))
 
     def push(self, queue, message, **options):
         """Sends a message to the specified queue."""
