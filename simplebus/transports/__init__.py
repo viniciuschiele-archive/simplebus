@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..transports.base import ReceiveFromTransportStep, RecoveryAwareTransport
+from ..transports.base import ReceiveFromTransportStep, RecoveryAwareTransport, TransportMessage
 from ..utils import import_string
 
 
@@ -49,3 +49,18 @@ def create_transport(url, recovery_enabled, recovery_min_delay, recovery_delta_d
         raise ValueError('recovery_delta_delay should be greater than 0')
 
     return RecoveryAwareTransport(transport, recovery_min_delay, recovery_delta_delay, recovery_max_delay)
+
+
+def get_transport(transports, endpoint):
+    """Gets the transport for the specified endpoint."""
+
+    if endpoint is None:
+        endpoint = 'default'
+
+    transport = transports.get(endpoint)
+
+    if transport is None:
+        raise RuntimeError("Transport '%s' not found" % endpoint)
+
+    return transport
+

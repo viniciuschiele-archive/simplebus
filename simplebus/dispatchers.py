@@ -21,8 +21,8 @@ dispatch them to the message handlers.
 import logging
 
 from .pipeline import PipelineStep
-from .transports.base import TransportMessage
-from .utils import create_random_id, get_transport
+from .transports import get_transport, TransportMessage
+from .utils import create_random_id
 
 
 LOGGER = logging.getLogger(__name__)

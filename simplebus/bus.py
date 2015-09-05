@@ -23,8 +23,8 @@ from .handlers import InvokeHandlerStep
 from .pipeline import Pipeline, IncomingContext, OutgoingContext
 from .serialization import DeserializeMessageStep, SerializeMessageStep, SerializerRegistry
 from .state import set_current_bus
-from .transports import create_transport, ReceiveFromTransportStep
-from .utils import create_random_id, get_transport, Loop
+from .transports import create_transport, get_transport, ReceiveFromTransportStep
+from .utils import create_random_id, Loop
 
 
 class Bus(object):

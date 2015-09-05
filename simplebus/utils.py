@@ -24,20 +24,6 @@ def create_random_id():
     return str(uuid.uuid4()).replace('-', '')
 
 
-def get_transport(transports, endpoint):
-    """Gets the transport for the specified endpoint."""
-
-    if endpoint is None:
-        endpoint = 'default'
-
-    transport = transports.get(endpoint)
-
-    if transport is None:
-        raise RuntimeError("Transport '%s' not found" % endpoint)
-
-    return transport
-
-
 def merge_dict(dst, src):
     """Merge two dictionaries into the first one."""
 
