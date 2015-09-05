@@ -18,6 +18,7 @@ from .cancellables import Cancellation, Subscription
 from .config import Config
 from .compression import CompressMessageStep, DecompressMessageStep, CompressorRegistry
 from .dispatchers import DispatchMessageStep
+from .faults import MoveFaultsToDeadLetterStep
 from .handlers import InvokeHandlerStep
 from .pipeline import Pipeline, IncomingContext, OutgoingContext
 from .retries import RetryMessageStep
@@ -46,6 +47,7 @@ class Bus(object):
         self.incoming_pipeline = Pipeline()
         self.incoming_pipeline.add_step(DecompressMessageStep(self.compressors))
         self.incoming_pipeline.add_step(DeserializeMessageStep(self.serializers))
+        self.incoming_pipeline.add_step(MoveFaultsToDeadLetterStep())
         self.incoming_pipeline.add_step(RetryMessageStep())
         self.incoming_pipeline.add_step(InvokeHandlerStep())
 

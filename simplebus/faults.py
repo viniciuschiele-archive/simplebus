@@ -12,12 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .errors import MaxRetriesExceeded
 from .pipeline import PipelineStep
 
 
-class RetryMessageStep(PipelineStep):
-    id = 'RetryMessage'
+class MoveFaultsToDeadLetterStep(PipelineStep):
+    id = 'MoveFaultsToDeadLetter'
 
     def execute(self, context, next_step):
         try:
@@ -25,7 +24,4 @@ class RetryMessageStep(PipelineStep):
         except AssertionError:
             raise
         except Exception as e:
-            try:
-                context.transport_message.retry()
-            except MaxRetriesExceeded:
-                raise e
+            context.transport_message.dead_letter(str(e))
