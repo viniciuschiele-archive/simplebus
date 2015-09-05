@@ -24,11 +24,6 @@ class CompressionError(SimpleBusError):
     pass
 
 
-class NoRetryError(SimpleBusError):
-    """Notifies to the Bus to do not retry the current message."""
-    pass
-
-
 class SerializationError(SimpleBusError):
     """Serialize or deserialize has failed."""
     pass
