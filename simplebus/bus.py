@@ -18,10 +18,9 @@ from .cancellables import Cancellation, Subscription
 from .config import Config
 from .compression import CompressMessageStep, DecompressMessageStep, CompressorRegistry
 from .dispatchers import DispatchMessageStep
-from .faults import MoveFaultsToDeadLetterStep
+from .faults import MoveFaultsToDeadLetterStep, RetryFaultsStep
 from .handlers import InvokeHandlerStep
 from .pipeline import Pipeline, IncomingContext, OutgoingContext
-from .retries import RetryMessageStep
 from .serialization import DeserializeMessageStep, SerializeMessageStep, SerializerRegistry
 from .state import set_current_bus
 from .transports import create_transport, ReceiveFromTransportStep
@@ -49,7 +48,7 @@ class Bus(object):
         self.incoming_pipeline.add_step(DecompressMessageStep(self.compressors))
         self.incoming_pipeline.add_step(DeserializeMessageStep(self.serializers))
         self.incoming_pipeline.add_step(MoveFaultsToDeadLetterStep())
-        self.incoming_pipeline.add_step(RetryMessageStep())
+        self.incoming_pipeline.add_step(RetryFaultsStep())
         self.incoming_pipeline.add_step(InvokeHandlerStep())
 
         self.outgoing_pipeline = Pipeline()
