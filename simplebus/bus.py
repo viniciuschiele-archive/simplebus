@@ -23,8 +23,8 @@ from .handlers import InvokeHandlerStep
 from .pipeline import Pipeline, IncomingContext, OutgoingContext
 from .retries import RetryMessageStep
 from .serialization import DeserializeMessageStep, SerializeMessageStep, SerializerRegistry
-from .state import set_current_bus, set_transport_message
-from .transports import create_transport
+from .state import set_current_bus
+from .transports import create_transport, ReceiveFromTransportStep
 from .utils import create_random_id, get_transport, Loop
 
 
@@ -45,6 +45,7 @@ class Bus(object):
         self.serializers = SerializerRegistry()
 
         self.incoming_pipeline = Pipeline()
+        self.incoming_pipeline.add_step(ReceiveFromTransportStep())
         self.incoming_pipeline.add_step(DecompressMessageStep(self.compressors))
         self.incoming_pipeline.add_step(DeserializeMessageStep(self.serializers))
         self.incoming_pipeline.add_step(MoveFaultsToDeadLetterStep())
@@ -128,7 +129,7 @@ class Bus(object):
         id = create_random_id()
         options = self.__get_queue_options(queue, options)
         transport = get_transport(self.__transports, options.get('endpoint'))
-        transport.pull(id, queue, self.__transport_receive(callback, options), options)
+        transport.pull(id, queue, self.__transport_receiver(callback, options), options)
         return Cancellation(id, transport)
 
     def publish(self, topic, message, **options):
@@ -148,7 +149,7 @@ class Bus(object):
         id = create_random_id()
         options = self.__get_topic_options(topic, options)
         transport = get_transport(self.__transports, options.get('endpoint'))
-        transport.subscribe(id, topic, self.__transport_receive(callback, options), options)
+        transport.subscribe(id, topic, self.__transport_receiver(callback, options), options)
         return Subscription(id, transport)
 
     def __ensure_started(self):
@@ -204,13 +205,8 @@ class Bus(object):
         for module in modules:
             __import__(module)
 
-    def __transport_receive(self, callback, options):
+    def __transport_receiver(self, callback, options):
         def wrapper(transport_message):
-            try:
-                context = IncomingContext(transport_message, callback, options)
-                set_transport_message(transport_message)
-                self.incoming_pipeline.execute(context)
-            finally:
-                transport_message.delete()
-                set_transport_message(None)
+            context = IncomingContext(transport_message, callback, options)
+            self.incoming_pipeline.execute(context)
         return wrapper

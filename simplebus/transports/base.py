@@ -21,6 +21,8 @@ import time
 from abc import ABCMeta
 from abc import abstractmethod
 from threading import Thread
+from ..pipeline import PipelineStep
+from ..state import set_transport_message
 from ..utils import EventHandler
 
 LOGGER = logging.getLogger(__name__)
@@ -305,3 +307,15 @@ class RecoveryAwareTransport(Transport):
         thread = Thread(target=self.__recover)
         thread.daemon = True
         thread.start()
+
+
+class ReceiveFromTransportStep(PipelineStep):
+    id = 'ReceiveFromTransport'
+
+    def execute(self, context, next_step):
+        try:
+            set_transport_message(context.transport_message)
+            next_step()
+        finally:
+            context.transport_message.delete()
+            set_transport_message(None)

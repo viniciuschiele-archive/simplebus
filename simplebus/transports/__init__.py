@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..transports.base import RecoveryAwareTransport
+from ..transports.base import ReceiveFromTransportStep, RecoveryAwareTransport
 from ..utils import import_string
 
 
