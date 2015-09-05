@@ -36,18 +36,16 @@ class DeserializeMessageStep(PipelineStep):
     def __init__(self, serializers):
         self.__serializers = serializers
 
-    def invoke(self, context, next_step):
-        transport_message = context.transport_message
-
-        if transport_message.content_type:
-            serializer = self.__serializers.find(transport_message.content_type)
+    def execute(self, context, next_step):
+        if context.content_type:
+            serializer = self.__serializers.find(context.content_type)
         elif context.options.get('serializer'):
             serializer = self.__serializers.get(context.options.get('serializer'))
         else:
             serializer = self.__serializers.first()
 
         try:
-            context.message = serializer[2](transport_message.body)
+            context.body = serializer.deserialize(context.body)
         except Exception as e:
             raise SerializationError(e)
 
@@ -60,22 +58,26 @@ class SerializeMessageStep(PipelineStep):
     def __init__(self, serializers):
         self.__serializers = serializers
 
-    def invoke(self, context, next_step):
+    def execute(self, context, next_step):
         if context.options.get('serializer'):
             serializer = self.__serializers.get(context.options.get('serializer'))
         else:
             serializer = self.__serializers.first()
 
         try:
-            context.content_type = serializer[0]
-            context.message = serializer[1](context.message)
-
-            if context.message is str:
-                context.message = context.message.encode()
+            context.body = serializer.serialize(context.body)
+            context.content_type = serializer.mimetype
         except Exception as e:
             raise SerializationError(e)
 
         next_step()
+
+
+class Serializer(object):
+    def __init__(self, mimetype, serialize, deserialize):
+        self.mimetype = mimetype
+        self.serialize = serialize
+        self.deserialize = deserialize
 
 
 class SerializerRegistry(object):
@@ -94,9 +96,10 @@ class SerializerRegistry(object):
         self.add('binary', 'application/octet-stream', lambda data: data, lambda data: data)
 
     def add(self, name, mimetype, compress, decompress):
+        serializer = Serializer(mimetype, compress, decompress)
         self.__names.append(name)
-        self.__serializers_by_name[name] = (mimetype, compress, decompress)
-        self.__serializers_by_mimetype[mimetype] = (mimetype, compress, decompress)
+        self.__serializers_by_name[name] = serializer
+        self.__serializers_by_mimetype[mimetype] = serializer
 
     def first(self):
         if len(self.__names) == 0:

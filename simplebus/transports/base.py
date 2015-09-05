@@ -85,18 +85,13 @@ class Transport(metaclass=ABCMeta):
 class TransportMessage(object):
     """An envelope used by SimpleBus to package messages for transmission."""
 
-    def __init__(self, app_id=None,
-                 message_id=None,
-                 content_type=None,
-                 content_encoding=None,
-                 body=None,
-                 expiration=None):
-        self._app_id = app_id
-        self._message_id = message_id
-        self._content_type = content_type
-        self._content_encoding = content_encoding
-        self._body = body
-        self._expiration = expiration
+    def __init__(self):
+        self._app_id = None
+        self._message_id = None
+        self._content_type = None
+        self._content_encoding = None
+        self._body = None
+        self._expiration = None
         self._retry_count = 0
         self._headers = {}
 

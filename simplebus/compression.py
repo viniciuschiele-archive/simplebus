@@ -26,12 +26,12 @@ class CompressMessageStep(PipelineStep):
     def __init__(self, compressors):
         self.__compressors = compressors
 
-    def invoke(self, context, next_step):
+    def execute(self, context, next_step):
         name = context.options.get('compressor')
         if name:
             try:
                 compressor = self.__compressors.get(name)
-                context.message = compressor[0](context.message)
+                context.body = compressor.compress(context.body)
                 context.content_encoding = name
             except Exception as e:
                 raise CompressionError(e)
@@ -45,18 +45,22 @@ class DecompressMessageStep(PipelineStep):
     def __init__(self, compressors):
         self.__compressors = compressors
 
-    def invoke(self, context, next_step):
-        transport_message = context.transport_message
-
-        if transport_message.content_encoding:
-            compressor = self.__compressors.get(transport_message.content_encoding)
+    def execute(self, context, next_step):
+        if context.content_encoding:
+            compressor = self.__compressors.get(context.content_encoding)
 
             try:
-                transport_message.body = compressor[1](transport_message.body)
+                context.body = compressor.decompress(context.body)
             except Exception as e:
                 raise CompressionError(e)
 
         next_step()
+
+
+class Compressor(object):
+    def __init__(self, compress, decompress):
+        self.compress = compress
+        self.decompress = decompress
 
 
 class CompressorRegistry(object):
@@ -65,7 +69,7 @@ class CompressorRegistry(object):
         self.add('gzip', zlib.compress, zlib.decompress)
 
     def add(self, name, compress, decompress):
-        self.__compressors[name] = (compress, decompress)
+        self.__compressors[name] = Compressor(compress, decompress)
 
     def get(self, name):
         compressor = self.__compressors.get(name)

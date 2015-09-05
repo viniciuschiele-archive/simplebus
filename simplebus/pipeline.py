@@ -1,3 +1,17 @@
+# Copyright 2015 Vinicius Chiele. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from abc import ABCMeta, abstractmethod
 from .errors import SimpleBusError
 
@@ -45,25 +59,46 @@ class Pipeline(object):
             if self.__steps[i].id == step_id:
                 self.__steps.pop(i)
 
-    def invoke(self, context):
+    def execute(self, context):
         if not self.__started:
-            raise SimpleBusError('Pipeline cannot be invoked when it is stopped.')
+            raise SimpleBusError('Pipeline cannot be executed when it is stopped.')
 
-        self.__invoke_step(context, 0)
+        self.__execute_step(context, 0)
 
-    def __invoke_step(self, context, index):
-        if index < len(self.__steps):
-            self.__steps[index].invoke(context, lambda: self.__invoke_step(context, index+1))
+    def __execute_step(self, context, step_index):
+        if step_index < len(self.__steps):
+            self.__steps[step_index].execute(context, lambda: self.__execute_step(context, step_index+1))
 
 
 class PipelineStep(metaclass=ABCMeta):
     id = None
 
     @abstractmethod
-    def invoke(self, context, next_step):
+    def execute(self, context, next_step):
         pass
 
 
 class PipelineContext(object):
     def __getattr__(self, item):
         return self.__dict__.get(item)
+
+
+class IncomingContext(PipelineContext):
+    def __init__(self, transport_message, callback, options):
+        self.transport_message = transport_message
+        self.callback = callback
+        self.options = options
+
+        self.headers = transport_message.headers
+        self.content_type = transport_message.content_type
+        self.content_encoding = transport_message.content_encoding
+        self.body = transport_message.body
+
+
+class OutgoingContext(PipelineContext):
+    def __init__(self, destination, publishing, body, options):
+        self.destination = destination
+        self.publishing = publishing
+        self.body = body
+        self.options = options
+        self.headers = {}

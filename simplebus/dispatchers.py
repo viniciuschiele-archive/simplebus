@@ -31,25 +31,26 @@ LOGGER = logging.getLogger(__name__)
 class DispatchMessageStep(PipelineStep):
     id = 'DispatchMessage'
 
-    def __init__(self, transports):
+    def __init__(self, app_id, transports):
+        self.__app_id = app_id
         self.__transports = transports
 
-    def invoke(self, context, next_step):
-        transport_message = TransportMessage(context.app_id,
-                                             create_random_id(),
-                                             context.content_type,
-                                             context.content_encoding,
-                                             context.message,
-                                             context.options.get('expiration'))
-
-        if context.headers:
-            transport_message.headers.update(context.headers)
+    def execute(self, context, next_step):
+        transport_message = TransportMessage()
+        transport_message.app_id = self.__app_id
+        transport_message.message_id = create_random_id()
+        transport_message.content_type = context.content_type
+        transport_message.content_encoding = context.content_encoding
+        transport_message.body = context.body
+        transport_message.expiration = context.options.get('expiration')
+        transport_message.headers.update(context.headers)
+        context.transport_message = transport_message
 
         transport = get_transport(self.__transports, context.options.get('endpoint'))
 
-        if context.queue:
-            transport.push(context.queue, transport_message, context.options)
+        if context.publishing:
+            transport.publish(context.destination, transport_message, context.options)
         else:
-            transport.publish(context.topic, transport_message, context.options)
+            transport.push(context.destination, transport_message, context.options)
 
         next_step()

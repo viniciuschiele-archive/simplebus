@@ -19,7 +19,7 @@ from .config import Config
 from .compression import CompressMessageStep, DecompressMessageStep, CompressorRegistry
 from .dispatchers import DispatchMessageStep
 from .handlers import InvokeHandlerStep
-from .pipeline import Pipeline, PipelineContext
+from .pipeline import Pipeline, IncomingContext, OutgoingContext
 from .recoverability import RetryMessageStep
 from .serialization import DeserializeMessageStep, SerializeMessageStep, SerializerRegistry
 from .state import set_current_bus, set_transport_message
@@ -52,7 +52,7 @@ class Bus(object):
         self.outgoing_pipeline = Pipeline()
         self.outgoing_pipeline.add_step(SerializeMessageStep(self.serializers))
         self.outgoing_pipeline.add_step(CompressMessageStep(self.compressors))
-        self.outgoing_pipeline.add_step(DispatchMessageStep(self.__transports))
+        self.outgoing_pipeline.add_step(DispatchMessageStep(self.app_id, self.__transports))
 
         self.config = Config()
 
@@ -114,12 +114,9 @@ class Bus(object):
 
         self.__ensure_started()
 
-        context = PipelineContext()
-        context.queue = queue
-        context.message = message
-        context.options = self.__get_queue_options(queue, options)
-
-        self.outgoing_pipeline.invoke(context)
+        options = self.__get_queue_options(queue, options)
+        context = OutgoingContext(queue, False, message, options)
+        self.outgoing_pipeline.execute(context)
 
     def pull(self, queue, callback, **options):
         """Starts receiving messages from the specified queue."""
@@ -137,12 +134,9 @@ class Bus(object):
 
         self.__ensure_started()
 
-        context = PipelineContext()
-        context.topic = topic
-        context.message = message
-        context.options = self.__get_topic_options(topic, options)
-
-        self.outgoing_pipeline.invoke(context)
+        options = self.__get_topic_options(topic, options)
+        context = OutgoingContext(topic, True, message, options)
+        self.outgoing_pipeline.execute(context)
 
     def subscribe(self, topic, callback, **options):
         """Subscribes to receive published messages to the specified topic."""
@@ -210,15 +204,10 @@ class Bus(object):
 
     def __transport_receive(self, callback, options):
         def wrapper(transport_message):
-            context = PipelineContext()
-            context.transport_message = transport_message
-            context.callback = callback
-            context.options = options
-
-            set_transport_message(transport_message)
-
             try:
-                self.incoming_pipeline.invoke(context)
+                context = IncomingContext(transport_message, callback, options)
+                set_transport_message(transport_message)
+                self.incoming_pipeline.execute(context)
             finally:
                 transport_message.delete()
                 set_transport_message(None)

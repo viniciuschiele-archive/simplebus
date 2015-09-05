@@ -22,10 +22,11 @@ from .pipeline import PipelineStep
 
 
 class InvokeHandlerStep(PipelineStep):
-    id = 'invoke_handler'
+    id = 'InvokeHandler'
 
-    def invoke(self, context, next_step):
-        context.callback(context.message)
+    def execute(self, context, next_step):
+        context.callback(context.body)
+        next_step()
 
 
 class MessageHandler(metaclass=ABCMeta):
