@@ -20,7 +20,7 @@ from .compression import CompressMessageStep, DecompressMessageStep, CompressorR
 from .dispatchers import DispatchMessageStep
 from .handlers import InvokeHandlerStep
 from .pipeline import Pipeline, IncomingContext, OutgoingContext
-from .recoverability import RetryMessageStep
+from .retries import RetryMessageStep
 from .serialization import DeserializeMessageStep, SerializeMessageStep, SerializerRegistry
 from .state import set_current_bus, set_transport_message
 from .transports import create_transport
