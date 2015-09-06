@@ -12,24 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .errors import MaxRetriesExceeded
 from .pipeline import PipelineStep
+from .transports import get_transport
 
 
 class MoveFaultsToDeadLetterStep(PipelineStep):
     id = 'MoveFaultsToDeadLetter'
 
-    def execute(self, context, next_step):
-        try:
-            next_step()
-        except AssertionError:
-            raise
-        except Exception as e:
-            context.transport_message.dead_letter(str(e))
-
-
-class RetryFaultsStep(PipelineStep):
-    id = 'RetryFaults'
+    def __init__(self, transports):
+        self.__transports = transports
 
     def execute(self, context, next_step):
         try:
@@ -37,7 +28,16 @@ class RetryFaultsStep(PipelineStep):
         except AssertionError:
             raise
         except Exception as e:
-            try:
-                context.transport_message.retry()
-            except MaxRetriesExceeded:
-                raise e
+            error_queue = context.options.get('error_queue')
+
+            if not error_queue:
+                raise
+
+            transport_message = context.transport_message
+            transport_message.headers['x-death-reason'] = str(e)
+            transport_message.headers['x-failed-address'] = context.options.get('address')
+            transport_message.expiration = None
+
+            transport = get_transport(self.__transports, context.options.get('endpoint'))
+            sender = transport.create_sender(error_queue)
+            sender.dispatch(transport_message)

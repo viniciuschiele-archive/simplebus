@@ -17,6 +17,7 @@
 import pickle
 
 from .errors import SerializationError
+from .messages import dict_to_message, message_to_dict
 from .pipeline import PipelineStep
 
 try:
@@ -33,23 +34,45 @@ except ImportError:
 class DeserializeMessageStep(PipelineStep):
     id = 'DeserializeMessage'
 
-    def __init__(self, serializers):
-        self.__serializers = serializers
+    def __init__(self, bus):
+        self.__messages = bus.messages
+        self.__serializers = bus.serializers
 
     def execute(self, context, next_step):
-        if context.content_type:
-            serializer = self.__serializers.find(context.content_type)
-        elif context.options.get('serializer'):
-            serializer = self.__serializers.get(context.options.get('serializer'))
-        else:
-            serializer = self.__serializers.first()
+        serializer = self.__get_best_serializer(context)
+        message_cls = self.__get_best_message_cls(context)
 
         try:
             context.body = serializer.deserialize(context.body)
+            context.body = dict_to_message(message_cls, context.body)
         except Exception as e:
             raise SerializationError(e)
 
         next_step()
+
+    def __get_best_serializer(self, context):
+        if context.content_type:
+            return self.__serializers.find(context.content_type)
+
+        return self.__serializers.get(context.options.get('serializer'))
+
+    def __get_best_message_cls(self, context):
+        if context.type:
+            message_cls = self.__messages.get_by_type(context.type)
+            if message_cls:
+                return message_cls
+            raise SerializationError('Not found a message class for the type \'%s\'.' % context.type)
+        else:
+            address = context.options.get('address')
+
+            messages_cls = self.__messages.get_by_address(address)
+            if len(messages_cls) == 1:
+                return messages_cls[0]
+
+            if not messages_cls:
+                raise SerializationError('Not found a message class for the address \'%s\'.' % address)
+            else:
+                raise SerializationError('Multiple message classes for the address \'%s\'.' % address)
 
 
 class SerializeMessageStep(PipelineStep):
@@ -59,13 +82,10 @@ class SerializeMessageStep(PipelineStep):
         self.__serializers = serializers
 
     def execute(self, context, next_step):
-        if context.options.get('serializer'):
-            serializer = self.__serializers.get(context.options.get('serializer'))
-        else:
-            serializer = self.__serializers.first()
+        serializer = self.__serializers.get(context.options.get('serializer'))
 
         try:
-            context.body = serializer.serialize(context.body)
+            context.body = serializer.serialize(message_to_dict(context.body))
             context.content_type = serializer.mimetype
         except Exception as e:
             raise SerializationError(e)
@@ -82,7 +102,6 @@ class Serializer(object):
 
 class SerializerRegistry(object):
     def __init__(self):
-        self.__names = []
         self.__serializers_by_name = {}
         self.__serializers_by_mimetype = {}
 
@@ -97,14 +116,8 @@ class SerializerRegistry(object):
 
     def add(self, name, mimetype, compress, decompress):
         serializer = Serializer(mimetype, compress, decompress)
-        self.__names.append(name)
         self.__serializers_by_name[name] = serializer
         self.__serializers_by_mimetype[mimetype] = serializer
-
-    def first(self):
-        if len(self.__names) == 0:
-            raise SerializationError('No serializer registered.')
-        return self.get(self.__names[0])
 
     def get(self, name):
         serializer = self.__serializers_by_name.get(name)
@@ -121,5 +134,4 @@ class SerializerRegistry(object):
     def remove(self, name):
         serializer = self.__serializers_by_name.pop(name)
         if serializer:
-            self.__names.remove(name)
             self.__serializers_by_mimetype.pop(serializer[0])

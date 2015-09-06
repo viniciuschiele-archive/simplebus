@@ -14,49 +14,48 @@
 
 """Message bus implementation."""
 
-from .cancellables import Cancellation, Subscription
 from .config import Config
 from .compression import CompressMessageStep, DecompressMessageStep, CompressorRegistry
 from .dispatchers import DispatchMessageStep
-from .faults import MoveFaultsToDeadLetterStep, RetryFaultsStep
+from .errors import SimpleBusError
+from .faults import MoveFaultsToDeadLetterStep
 from .handlers import InvokeHandlerStep
-from .pipeline import Pipeline, IncomingContext, OutgoingContext
+from .messages import get_message_name, get_message_options, is_command, setup_message_class, MessageRegistry
+from .pipeline import Pipeline, OutgoingContext
 from .serialization import DeserializeMessageStep, SerializeMessageStep, SerializerRegistry
 from .state import set_current_bus
 from .transports import create_transport, get_transport, ReceiveFromTransportStep
-from .utils import create_random_id, Loop
+from .utils import Loop
 
 
-class Bus(object):
+class SimpleBus(object):
     """This class provides methods for receiving and sending messages over multiple brokers."""
 
     def __init__(self, app_id=None):
         self.__app_id = app_id
-        self.__queue_options = {}
-        self.__topic_options = {}
-        self.__started = False
+        self.__handlers = {}
         self.__transports = {}
-        self.__queues_cached = {}
-        self.__topics_cached = {}
+        self.__cached_options = {}
         self.__loop = Loop()
+        self.__started = False
+
+        self.config = Config()
 
         self.compressors = CompressorRegistry()
         self.serializers = SerializerRegistry()
+        self.messages = MessageRegistry(self.config)
 
         self.incoming_pipeline = Pipeline()
-        self.incoming_pipeline.add_step(ReceiveFromTransportStep())
+        self.incoming_pipeline.add_step(ReceiveFromTransportStep(self.messages))
         self.incoming_pipeline.add_step(DecompressMessageStep(self.compressors))
-        self.incoming_pipeline.add_step(DeserializeMessageStep(self.serializers))
-        self.incoming_pipeline.add_step(MoveFaultsToDeadLetterStep())
-        self.incoming_pipeline.add_step(RetryFaultsStep())
-        self.incoming_pipeline.add_step(InvokeHandlerStep())
+        self.incoming_pipeline.add_step(DeserializeMessageStep(self))
+        self.incoming_pipeline.add_step(MoveFaultsToDeadLetterStep(self.__transports))
+        self.incoming_pipeline.add_step(InvokeHandlerStep(self.__handlers))
 
         self.outgoing_pipeline = Pipeline()
         self.outgoing_pipeline.add_step(SerializeMessageStep(self.serializers))
         self.outgoing_pipeline.add_step(CompressMessageStep(self.compressors))
         self.outgoing_pipeline.add_step(DispatchMessageStep(self.app_id, self.__transports))
-
-        self.config = Config()
 
     @property
     def app_id(self):
@@ -72,19 +71,71 @@ class Bus(object):
     def loop(self):
         return self.__loop
 
+    def add_handler(self, message_cls, f):
+        if self.__handlers.get(message_cls):
+            raise SimpleBusError('Message \'%s\' already has a handler.' % str(message_cls))
+        self.__handlers[message_cls] = f
+
+    def command(self, name=None, address=None, error_queue=None, expires=None, concurrency=None,
+                prefetch_count=None, compressor=None, serializer=None, endpoint=None):
+        def decorator(cls):
+            setup_message_class(cls, name, 0, address, error_queue, expires, concurrency, prefetch_count,
+                                compressor, serializer, endpoint)
+            return cls
+        return decorator
+
+    def event(self, name=None, address=None, error_queue=None, expires=None, concurrency=None,
+              prefetch_count=None, compressor=None, serializer=None, endpoint=None):
+        def decorator(cls):
+            setup_message_class(cls, name, 1, address, error_queue, expires, concurrency, prefetch_count,
+                                compressor, serializer, endpoint)
+            return cls
+        return decorator
+
+    def handle(self, message_cls):
+        def decorator(f):
+            self.add_handler(message_cls, f)
+        return decorator
+
+    def publish(self, message):
+        """Publishes a message to the specified topic."""
+        self.__ensure_started()
+
+        options = self.messages.get_options(type(message))
+        context = OutgoingContext(message, options)
+        self.outgoing_pipeline.execute(context)
+
+    def subscribe(self, message_cls):
+        """Subscribes to receive published messages to the specified topic."""
+        self.__ensure_started()
+
+        options = self.messages.add(message_cls)
+
+        endpoint = options.get('endpoint')
+        address = options.get('address')
+        concurrency = options.get('concurrency')
+        prefetch_count = options.get('prefetch_count')
+
+        transport = get_transport(self.__transports, endpoint)
+
+        if is_command(message_cls):
+            consumer = transport.create_pumper(self.incoming_pipeline, address, concurrency, prefetch_count)
+        else:
+            consumer = transport.create_subscriber(self.incoming_pipeline, address, concurrency, prefetch_count)
+
+        consumer.start()
+        return consumer
+
     def start(self):
         """Starts the bus."""
+        if self.is_started:
+            return
 
         if len(self.config.SIMPLEBUS_ENDPOINTS) == 0:
             raise RuntimeError('SimpleBus must have at least one endpoint')
 
         for key, endpoint in self.config.SIMPLEBUS_ENDPOINTS.items():
-            transport = create_transport(
-                endpoint,
-                self.config.SIMPLEBUS_RECOVERY,
-                self.config.SIMPLEBUS_RECOVERY_MIN_DELAY,
-                self.config.SIMPLEBUS_RECOVERY_DELTA_DELAY,
-                self.config.SIMPLEBUS_RECOVERY_MAX_DELAY)
+            transport = create_transport(endpoint)
             transport.open()
             self.__transports[key] = transport
 
@@ -97,8 +148,13 @@ class Bus(object):
 
         self.__load_imports()
 
+        if self.config.SIMPLEBUS_AUTO_SUBSCRIBE:
+            self.__auto_subscribe()
+
     def stop(self):
         """Stops the bus."""
+        if not self.__started:
+            return
 
         self.__started = False
 
@@ -111,89 +167,14 @@ class Bus(object):
 
         set_current_bus(None)
 
-    def push(self, queue, message, **options):
-        """Sends a message to the specified queue."""
-
-        self.__ensure_started()
-
-        options = self.__get_queue_options(queue, options)
-        context = OutgoingContext(queue, False, message, options)
-        self.outgoing_pipeline.execute(context)
-
-    def pull(self, queue, callback, **options):
-        """Starts receiving messages from the specified queue."""
-
-        self.__ensure_started()
-
-        id = create_random_id()
-        options = self.__get_queue_options(queue, options)
-        transport = get_transport(self.__transports, options.get('endpoint'))
-        transport.pull(id, queue, self.__transport_receiver(callback, options), options)
-        return Cancellation(id, transport)
-
-    def publish(self, topic, message, **options):
-        """Publishes a message to the specified topic."""
-
-        self.__ensure_started()
-
-        options = self.__get_topic_options(topic, options)
-        context = OutgoingContext(topic, True, message, options)
-        self.outgoing_pipeline.execute(context)
-
-    def subscribe(self, topic, callback, **options):
-        """Subscribes to receive published messages to the specified topic."""
-
-        self.__ensure_started()
-
-        id = create_random_id()
-        options = self.__get_topic_options(topic, options)
-        transport = get_transport(self.__transports, options.get('endpoint'))
-        transport.subscribe(id, topic, self.__transport_receiver(callback, options), options)
-        return Subscription(id, transport)
+    def __auto_subscribe(self):
+        for message_cls in self.__handlers:
+            self.subscribe(message_cls)
 
     def __ensure_started(self):
         """If the bus is not started it starts."""
         if not self.is_started:
             self.start()
-
-    def __get_queue_options(self, queue, override_options):
-        """Gets the options for the specified queue."""
-
-        return self.__get_options(
-            self.__queues_cached,
-            queue,
-            override_options,
-            self.config.SIMPLEBUS_QUEUES)
-
-    def __get_topic_options(self, topic, override_options):
-        """Gets the options for the specified topic."""
-
-        return self.__get_options(
-            self.__topics_cached,
-            topic,
-            override_options,
-            self.config.SIMPLEBUS_TOPICS)
-
-    @staticmethod
-    def __get_options(cache, key, override_options, pool_options):
-        """Gets the options for the specified key."""
-
-        options = cache.get(key)
-
-        if not options:
-            options = pool_options.get('*').copy()
-            options_form_config = pool_options.get(key)
-
-            if options_form_config:
-                options.update(options_form_config)
-
-            cache[key] = options
-
-        if override_options:
-            options = options.copy()
-            options.update(override_options)
-
-        return options
 
     def __load_imports(self):
         """Loads the modules configured in the configuration object."""
@@ -203,9 +184,3 @@ class Bus(object):
             return
         for module in modules:
             __import__(module)
-
-    def __transport_receiver(self, callback, options):
-        def wrapper(transport_message):
-            context = IncomingContext(transport_message, callback, options)
-            self.incoming_pipeline.execute(context)
-        return wrapper

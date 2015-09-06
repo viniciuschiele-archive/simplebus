@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..transports.base import ReceiveFromTransportStep, RecoveryAwareTransport, TransportMessage
+from ..transports.base import ReceiveFromTransportStep, TransportMessage
 from ..utils import import_string
 
 
@@ -21,7 +21,7 @@ TRANSPORT_ALIASES = {
 }
 
 
-def create_transport(url, recovery_enabled, recovery_min_delay, recovery_delta_delay, recovery_max_delay):
+def create_transport(url):
     if '://' not in url:
         raise ValueError('Invalid url %s.' % url)
 
@@ -34,21 +34,7 @@ def create_transport(url, recovery_enabled, recovery_min_delay, recovery_delta_d
 
     transport_cls = import_string(class_name)
 
-    transport = transport_cls(url)
-
-    if not recovery_enabled:
-        return transport
-
-    if recovery_min_delay < 0:
-        raise ValueError('recovery_min_delay should be greater or equal to 0')
-
-    if recovery_min_delay > recovery_max_delay:
-        raise ValueError('recovery_min_delay should be less or equal to recovery_max_delay')
-
-    if recovery_delta_delay < 1:
-        raise ValueError('recovery_delta_delay should be greater than 0')
-
-    return RecoveryAwareTransport(transport, recovery_min_delay, recovery_delta_delay, recovery_max_delay)
+    return transport_cls(url)
 
 
 def get_transport(transports, endpoint):

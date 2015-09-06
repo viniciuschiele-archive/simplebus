@@ -32,8 +32,3 @@ class SerializationError(SimpleBusError):
 class LimitedExceeded(SimpleBusError):
     """Resources were exceeded."""
     pass
-
-
-class MaxRetriesExceeded(SimpleBusError):
-    """Maximum of retries exceeded."""
-    pass

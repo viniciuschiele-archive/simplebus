@@ -16,26 +16,21 @@
 Message Handler is used to process a message received.
 """
 
-from abc import ABCMeta
-from abc import abstractmethod
+from .errors import SimpleBusError
 from .pipeline import PipelineStep
 
 
 class InvokeHandlerStep(PipelineStep):
     id = 'InvokeHandler'
 
+    def __init__(self, handlers):
+        self.__handlers = handlers
+
     def execute(self, context, next_step):
-        context.callback(context.body)
+        handler = self.__handlers.get(type(context.body))
+
+        if not handler:
+            raise SimpleBusError('No handler found to the message \'%s\'.' % str(type(context.body)))
+
+        handler(context.body)
         next_step()
-
-
-class MessageHandler(metaclass=ABCMeta):
-    """Defines a message handler."""
-
-    def __call__(self, *args, **kwargs):
-        self.handle(*args, **kwargs)
-
-    @abstractmethod
-    def handle(self, message):
-        """Handles a message."""
-        pass

@@ -20,6 +20,7 @@ dispatch them to the message handlers.
 
 import logging
 
+from .messages import is_command, get_message_name
 from .pipeline import PipelineStep
 from .transports import get_transport, TransportMessage
 from .utils import create_random_id
@@ -36,21 +37,25 @@ class DispatchMessageStep(PipelineStep):
         self.__transports = transports
 
     def execute(self, context, next_step):
+        options = context.options
         transport_message = TransportMessage()
         transport_message.app_id = self.__app_id
         transport_message.message_id = create_random_id()
+        transport_message.expiration = options.get('expires')
         transport_message.content_type = context.content_type
         transport_message.content_encoding = context.content_encoding
         transport_message.body = context.body
-        transport_message.expiration = context.options.get('expiration')
-        transport_message.headers.update(context.headers)
-        context.transport_message = transport_message
+        transport_message.type = get_message_name(context.message_cls)
 
-        transport = get_transport(self.__transports, context.options.get('endpoint'))
+        address = options.get('address')
 
-        if context.publishing:
-            transport.publish(context.destination, transport_message, context.options)
+        transport = get_transport(self.__transports, options.get('endpoint'))
+
+        if is_command(context.message_cls):
+            dispatcher = transport.create_sender(address)
         else:
-            transport.push(context.destination, transport_message, context.options)
+            dispatcher = transport.create_publisher(address)
+
+        dispatcher.dispatch(transport_message)
 
         next_step()

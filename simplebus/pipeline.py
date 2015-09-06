@@ -79,26 +79,27 @@ class PipelineStep(metaclass=ABCMeta):
 
 
 class PipelineContext(object):
+    def update(self, other=None, **kwargs):
+        self.__dict__.update(other, **kwargs)
+
     def __getattr__(self, item):
         return self.__dict__.get(item)
 
 
 class IncomingContext(PipelineContext):
-    def __init__(self, transport_message, callback, options):
+    def __init__(self, transport_message, address):
         self.transport_message = transport_message
-        self.callback = callback
-        self.options = options
-
-        self.headers = transport_message.headers
+        self.address = address
         self.content_type = transport_message.content_type
         self.content_encoding = transport_message.content_encoding
         self.body = transport_message.body
+        self.type = transport_message.type
+        self.headers = transport_message.headers
 
 
 class OutgoingContext(PipelineContext):
-    def __init__(self, destination, publishing, body, options):
-        self.destination = destination
-        self.publishing = publishing
-        self.body = body
+    def __init__(self, message, options):
+        self.message = message
+        self.message_cls = type(message)
+        self.body = message
         self.options = options
-        self.headers = {}
