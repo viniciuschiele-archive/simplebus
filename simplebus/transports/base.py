@@ -19,10 +19,47 @@ import logging
 
 from abc import ABCMeta, abstractmethod
 from ..errors import SimpleBusError
+from ..messages import is_command, get_message_name
 from ..pipeline import PipelineStep
 from ..state import set_transport_message
+from ..utils import create_random_id, import_string
 
 LOGGER = logging.getLogger(__name__)
+
+
+TRANSPORT_ALIASES = {
+    'amqp': 'simplebus.transports.amqp.Transport',
+}
+
+
+def create_transport(url):
+    if '://' not in url:
+        raise ValueError('Invalid url %s.' % url)
+
+    schema = url.partition('://')[0]
+
+    class_name = TRANSPORT_ALIASES.get(schema)
+
+    if class_name is None:
+        raise ValueError('Invalid schema %s.' % schema)
+
+    transport_cls = import_string(class_name)
+
+    return transport_cls(url)
+
+
+def get_transport(transports, endpoint):
+    """Gets the transport for the specified endpoint."""
+
+    if endpoint is None:
+        endpoint = 'default'
+
+    transport = transports.get(endpoint)
+
+    if transport is None:
+        raise RuntimeError("Transport '%s' not found" % endpoint)
+
+    return transport
 
 
 class Transport(metaclass=ABCMeta):
@@ -48,19 +85,23 @@ class Transport(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def create_sender(self, options):
+    def create_queue_publisher(self, address):
         pass
 
     @abstractmethod
-    def create_pumper(self, pipeline, address, concurrency, prefetch_count):
+    def create_queue_purger(self, address):
         pass
 
     @abstractmethod
-    def create_publisher(self, options):
+    def create_queue_subscriber(self, pipeline, address, concurrency, prefetch_count):
         pass
 
     @abstractmethod
-    def create_subscriber(self, pipeline, address, concurrency, prefetch_count):
+    def create_topic_publisher(self, address):
+        pass
+
+    @abstractmethod
+    def create_topic_subscriber(self, pipeline, address, concurrency, prefetch_count):
         pass
 
 
@@ -79,13 +120,13 @@ class TransportMessage(object):
         self.headers = headers or {}
 
 
-class MessageDispatcher(metaclass=ABCMeta):
+class MessagePublisher(metaclass=ABCMeta):
     @abstractmethod
-    def dispatch(self, message):
+    def publish(self, message):
         pass
 
 
-class MessageConsumer(metaclass=ABCMeta):
+class MessageSubscriber(metaclass=ABCMeta):
     @property
     @abstractmethod
     def is_started(self):
@@ -97,6 +138,12 @@ class MessageConsumer(metaclass=ABCMeta):
 
     @abstractmethod
     def stop(self):
+        pass
+
+
+class MessagePurger(metaclass=ABCMeta):
+    @abstractmethod
+    def purge(self):
         pass
 
 
@@ -128,7 +175,40 @@ class ReceiveFromTransportStep(PipelineStep):
             if len(messages_cls) == 1:
                 return messages_cls[0]
 
-            if not messages_cls:
-                raise SimpleBusError('Not found a message class for the address \'%s\'.' % address)
-            else:
+            if messages_cls:
                 raise SimpleBusError('Multiple message classes for the address \'%s\'.' % address)
+
+            raise SimpleBusError('Not found a message class for the address \'%s\'.' % address)
+
+
+class SendToTransportStep(PipelineStep):
+    id = 'SendToTransport'
+
+    def __init__(self, app_id, transports):
+        self.__app_id = app_id
+        self.__transports = transports
+
+    def execute(self, context, next_step):
+        options = context.options
+        transport_message = TransportMessage()
+        transport_message.app_id = self.__app_id
+        transport_message.message_id = create_random_id()
+        transport_message.expiration = options.get('expires')
+        transport_message.content_type = context.content_type
+        transport_message.content_encoding = context.content_encoding
+        transport_message.body = context.body
+        transport_message.type = get_message_name(context.message_cls)
+
+        address = options.get('address')
+
+        transport = get_transport(self.__transports, options.get('endpoint'))
+
+        if is_command(context.message_cls):
+            publisher = transport.create_queue_publisher(address)
+        else:
+            publisher = transport.create_topic_publisher(address)
+
+        publisher.publish(transport_message)
+
+        next_step()
+

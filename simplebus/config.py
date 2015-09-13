@@ -41,6 +41,9 @@ class Config(object):
     # Subscribes the messages when the bus starts.
     SIMPLEBUS_AUTO_SUBSCRIBE = True
 
+    # Purge the subscribed messages.
+    SIMPLEBUS_PURGE_ON_STARTUP = False
+
     #: A sequence of modules to import when the bus starts.
     SIMPLEBUS_IMPORTS = []
 

@@ -24,6 +24,7 @@ import logging
 import time
 import uuid
 
+from amqpstorm.queue import Queue
 from threading import Lock, Thread
 from urllib import parse
 from ..pipeline import IncomingContext
@@ -49,7 +50,7 @@ class Transport(base.Transport):
         self.__close_lock = Lock()
         self.__closed_by_user = None
         self.__url = url
-        self.__consumers = []
+        self.__subscribers = []
 
         self.__load_url_parameters(url)
 
@@ -75,21 +76,24 @@ class Transport(base.Transport):
             return
         self.__close(True)
 
-    def create_sender(self, address):
-        return MessageSender(address, self)
+    def create_queue_publisher(self, address):
+        return QueuePublisher(address, self)
 
-    def create_pumper(self, pipeline, address, concurrency, prefetch_count):
-        consumer = MessagePumper(self, pipeline, address, concurrency, prefetch_count)
-        self.__consumers.append(consumer)
-        return consumer
+    def create_queue_purger(self, address):
+        return QueuePurger(address, self)
 
-    def create_publisher(self, address):
-        return MessagePublisher(address, self)
+    def create_queue_subscriber(self, pipeline, address, concurrency, prefetch_count):
+        subscriber = QueueSubscriber(self, pipeline, address, concurrency, prefetch_count)
+        self.__subscribers.append(subscriber)
+        return subscriber
 
-    def create_subscriber(self, pipeline, address, concurrency, prefetch_count):
-        consumer = MessageSubscriber(self, pipeline, address, concurrency, prefetch_count)
-        self.__consumers.append(consumer)
-        return consumer
+    def create_topic_publisher(self, address):
+        return TopicPublisher(address, self)
+
+    def create_topic_subscriber(self, pipeline, address, concurrency, prefetch_count):
+        subscriber = TopicSubscriber(self, pipeline, address, concurrency, prefetch_count)
+        self.__subscribers.append(subscriber)
+        return subscriber
 
     def create_transport_message(self, message):
         transport_message = base.TransportMessage()
@@ -245,12 +249,12 @@ class Transport(base.Transport):
                 delay = max(delay * self.__reconnect_delta_exponent, self.__reconnect_max_delay)
 
 
-class MessageSender(base.MessageDispatcher):
+class QueuePublisher(base.MessagePublisher):
     def __init__(self, address, transport):
         self.__address = address
         self.__transport = transport
 
-    def dispatch(self, message):
+    def publish(self, message):
         for i in range(2):
             try:
                 self.__transport.send_message('', self.__address, message, True, True)
@@ -268,16 +272,21 @@ class MessageSender(base.MessageDispatcher):
             self.__transport.release_channel(channel)
 
 
-class MessagePublisher(base.MessageDispatcher):
+class QueuePurger(base.MessagePurger):
     def __init__(self, address, transport):
         self.__address = address
         self.__transport = transport
 
-    def dispatch(self, message):
-        self.__transport.send_message(self.__address, '', message, False, True)
+    def purge(self):
+        channel = self.__transport.create_channel()
+
+        try:
+            Queue(channel).purge(self.__address)
+        finally:
+            channel.close()
 
 
-class MessagePumper(base.MessageConsumer):
+class QueueSubscriber(base.MessageSubscriber):
     def __init__(self, transport, pipeline, address, concurrency, prefetch_count):
         self.__transport = transport
         self.__pipeline = pipeline
@@ -332,7 +341,16 @@ class MessagePumper(base.MessageConsumer):
             message.reject(True)
 
 
-class MessageSubscriber(base.MessageConsumer):
+class TopicPublisher(base.MessagePublisher):
+    def __init__(self, address, transport):
+        self.__address = address
+        self.__transport = transport
+
+    def publish(self, message):
+        self.__transport.send_message(self.__address, '', message, False, True)
+
+
+class TopicSubscriber(base.MessageSubscriber):
     def __init__(self, transport, pipeline, address, concurrency, prefetch_count):
         self.__transport = transport
         self.__pipeline = pipeline

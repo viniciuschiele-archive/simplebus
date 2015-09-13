@@ -16,15 +16,14 @@
 
 from .config import Config
 from .compression import CompressMessageStep, DecompressMessageStep, CompressorRegistry
-from .dispatchers import DispatchMessageStep
 from .errors import SimpleBusError
 from .faults import MoveFaultsToDeadLetterStep
 from .handlers import InvokeHandlerStep
-from .messages import get_message_name, get_message_options, is_command, setup_message_class, MessageRegistry
+from .messages import is_command, setup_message_class, MessageRegistry
 from .pipeline import Pipeline, OutgoingContext
 from .serialization import DeserializeMessageStep, SerializeMessageStep, SerializerRegistry
 from .state import set_current_bus
-from .transports import create_transport, get_transport, ReceiveFromTransportStep
+from .transports import create_transport, get_transport, ReceiveFromTransportStep, SendToTransportStep
 from .utils import Loop
 
 
@@ -55,7 +54,7 @@ class SimpleBus(object):
         self.outgoing_pipeline = Pipeline()
         self.outgoing_pipeline.add_step(SerializeMessageStep(self.serializers))
         self.outgoing_pipeline.add_step(CompressMessageStep(self.compressors))
-        self.outgoing_pipeline.add_step(DispatchMessageStep(self.app_id, self.__transports))
+        self.outgoing_pipeline.add_step(SendToTransportStep(self.app_id, self.__transports))
 
     @property
     def app_id(self):
@@ -77,10 +76,10 @@ class SimpleBus(object):
         self.__handlers[message_cls] = f
 
     def command(self, name=None, address=None, error_queue=None, expires=None, concurrency=None,
-                prefetch_count=None, compressor=None, serializer=None, endpoint=None):
+                prefetch_count=None, compressor=None, serializer=None, purge=None, endpoint=None):
         def decorator(cls):
             setup_message_class(cls, name, 0, address, error_queue, expires, concurrency, prefetch_count,
-                                compressor, serializer, endpoint)
+                                compressor, serializer, purge, endpoint)
             return cls
         return decorator
 
@@ -88,7 +87,7 @@ class SimpleBus(object):
               prefetch_count=None, compressor=None, serializer=None, endpoint=None):
         def decorator(cls):
             setup_message_class(cls, name, 1, address, error_queue, expires, concurrency, prefetch_count,
-                                compressor, serializer, endpoint)
+                                compressor, serializer, False, endpoint)
             return cls
         return decorator
 
@@ -111,20 +110,28 @@ class SimpleBus(object):
 
         options = self.messages.add(message_cls)
 
-        endpoint = options.get('endpoint')
         address = options.get('address')
         concurrency = options.get('concurrency')
         prefetch_count = options.get('prefetch_count')
+        purge = options.get('purge')
+        endpoint = options.get('endpoint')
 
         transport = get_transport(self.__transports, endpoint)
 
-        if is_command(message_cls):
-            consumer = transport.create_pumper(self.incoming_pipeline, address, concurrency, prefetch_count)
-        else:
-            consumer = transport.create_subscriber(self.incoming_pipeline, address, concurrency, prefetch_count)
+        purger = None
 
-        consumer.start()
-        return consumer
+        if is_command(message_cls):
+            if purge:
+                purger = transport.create_queue_purger(address)
+            subscriber = transport.create_queue_subscriber(self.incoming_pipeline, address, concurrency, prefetch_count)
+        else:
+            subscriber = transport.create_topic_subscriber(self.incoming_pipeline, address, concurrency, prefetch_count)
+
+        if purger:
+            purger.purge()
+
+        subscriber.start()
+        return subscriber
 
     def start(self):
         """Starts the bus."""

@@ -12,41 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..transports.base import ReceiveFromTransportStep, TransportMessage
-from ..utils import import_string
-
-
-TRANSPORT_ALIASES = {
-    'amqp': 'simplebus.transports.amqp.Transport',
-}
-
-
-def create_transport(url):
-    if '://' not in url:
-        raise ValueError('Invalid url %s.' % url)
-
-    schema = url.partition('://')[0]
-
-    class_name = TRANSPORT_ALIASES.get(schema)
-
-    if class_name is None:
-        raise ValueError('Invalid schema %s.' % schema)
-
-    transport_cls = import_string(class_name)
-
-    return transport_cls(url)
-
-
-def get_transport(transports, endpoint):
-    """Gets the transport for the specified endpoint."""
-
-    if endpoint is None:
-        endpoint = 'default'
-
-    transport = transports.get(endpoint)
-
-    if transport is None:
-        raise RuntimeError("Transport '%s' not found" % endpoint)
-
-    return transport
-
+from ..transports.base import create_transport
+from ..transports.base import get_transport
+from ..transports.base import ReceiveFromTransportStep
+from ..transports.base import SendToTransportStep
+from ..transports.base import TransportMessage

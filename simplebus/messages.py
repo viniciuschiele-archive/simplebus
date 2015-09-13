@@ -42,7 +42,7 @@ def is_event(message_cls):
 
 
 def setup_message_class(message_cls, name, type, address, error_queue, expires, concurrency, prefetch_count,
-                        compressor, serializer, endpoint):
+                        compressor, serializer, purge, endpoint):
     message_cls.__message_name__ = name or message_cls.__name__
     message_cls.__message_type__ = type
     message_cls.__message_options__ = {}
@@ -69,6 +69,9 @@ def setup_message_class(message_cls, name, type, address, error_queue, expires, 
 
     if serializer:
         message_cls.__message_options__['serializer'] = serializer
+
+    if purge:
+        message_cls.__message_options__['purge'] = purge
 
     if endpoint:
         message_cls.__message_options__['endpoint'] = endpoint
@@ -140,6 +143,7 @@ class MessageRegistry(object):
             'prefetch_count': self.__config.SIMPLEBUS_MESSAGE_PREFETCH_COUNT,
             'compressor': self.__config.SIMPLEBUS_MESSAGE_COMPRESSOR,
             'serializer': self.__config.SIMPLEBUS_MESSAGE_SERIALIZER,
+            'purge': self.__config.SIMPLEBUS_PURGE_ON_STARTUP,
         }
 
         options2 = self.__config.SIMPLEBUS_MESSAGES.get(get_message_name(message_cls))
