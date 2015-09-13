@@ -85,23 +85,23 @@ class Transport(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def create_queue_publisher(self, address):
+    def create_queue_publisher(self, destination):
         pass
 
     @abstractmethod
-    def create_queue_purger(self, address):
+    def create_queue_purger(self, destination):
         pass
 
     @abstractmethod
-    def create_queue_subscriber(self, pipeline, address, concurrency, prefetch_count):
+    def create_queue_subscriber(self, pipeline, destination, concurrency, prefetch_count):
         pass
 
     @abstractmethod
-    def create_topic_publisher(self, address):
+    def create_topic_publisher(self, destination):
         pass
 
     @abstractmethod
-    def create_topic_subscriber(self, pipeline, address, concurrency, prefetch_count):
+    def create_topic_subscriber(self, pipeline, destination, concurrency, prefetch_count):
         pass
 
 
@@ -157,28 +157,28 @@ class ReceiveFromTransportStep(PipelineStep):
         try:
             set_transport_message(context.transport_message)
 
-            context.message_cls = self.__get_best_message_cls(context.transport_message, context.address)
+            context.message_cls = self.__get_best_message_cls(context.transport_message, context.destination)
             context.options = self.__messages.get_options(context.message_cls)
 
             next_step()
         finally:
             set_transport_message(None)
 
-    def __get_best_message_cls(self, transport_message, address):
+    def __get_best_message_cls(self, transport_message, destination):
         if transport_message.type:
             message_cls = self.__messages.get_by_type(transport_message.type)
             if message_cls:
                 return message_cls
             raise SimpleBusError('Not found a message class for the type \'%s\'.' % transport_message.type)
         else:
-            messages_cls = self.__messages.get_by_address(address)
+            messages_cls = self.__messages.get_by_destination(destination)
             if len(messages_cls) == 1:
                 return messages_cls[0]
 
             if messages_cls:
-                raise SimpleBusError('Multiple message classes for the address \'%s\'.' % address)
+                raise SimpleBusError('Multiple message classes for the destination \'%s\'.' % destination)
 
-            raise SimpleBusError('Not found a message class for the address \'%s\'.' % address)
+            raise SimpleBusError('Not found a message class for the destination \'%s\'.' % destination)
 
 
 class SendToTransportStep(PipelineStep):
@@ -199,14 +199,14 @@ class SendToTransportStep(PipelineStep):
         transport_message.body = context.body
         transport_message.type = get_message_name(context.message_cls)
 
-        address = options.get('address')
+        destination = options.get('destination')
 
         transport = get_transport(self.__transports, options.get('endpoint'))
 
         if is_command(context.message_cls):
-            publisher = transport.create_queue_publisher(address)
+            publisher = transport.create_queue_publisher(destination)
         else:
-            publisher = transport.create_topic_publisher(address)
+            publisher = transport.create_topic_publisher(destination)
 
         publisher.publish(transport_message)
 

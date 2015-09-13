@@ -32,8 +32,8 @@ class Config(object):
     SIMPLEBUS_MESSAGE_EXPIRES = None
     SIMPLEBUS_MESSAGE_SERIALIZER = 'json'
     SIMPLEBUS_MESSAGE_ERROR_QUEUE = 'simplebus.errors'
-    SIMPLEBUS_COMMAND_ADDRESS = 'simplebus.commands'
-    SIMPLEBUS_EVENT_ADDRESS = 'simplebus.events'
+    SIMPLEBUS_COMMAND_DESTINATION = 'simplebus.commands'
+    SIMPLEBUS_EVENT_DESTINATION = 'simplebus.events'
 
     # Options per message.
     SIMPLEBUS_MESSAGES = {}

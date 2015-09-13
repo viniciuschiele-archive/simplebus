@@ -24,7 +24,6 @@ import logging
 import time
 import uuid
 
-from amqpstorm.queue import Queue
 from threading import Lock, Thread
 from urllib import parse
 from ..pipeline import IncomingContext
@@ -76,22 +75,22 @@ class Transport(base.Transport):
             return
         self.__close(True)
 
-    def create_queue_publisher(self, address):
-        return QueuePublisher(address, self)
+    def create_queue_publisher(self, destination):
+        return QueuePublisher(destination, self)
 
-    def create_queue_purger(self, address):
-        return QueuePurger(address, self)
+    def create_queue_purger(self, destination):
+        return QueuePurger(destination, self)
 
-    def create_queue_subscriber(self, pipeline, address, concurrency, prefetch_count):
-        subscriber = QueueSubscriber(self, pipeline, address, concurrency, prefetch_count)
+    def create_queue_subscriber(self, pipeline, destination, concurrency, prefetch_count):
+        subscriber = QueueSubscriber(self, pipeline, destination, concurrency, prefetch_count)
         self.__subscribers.append(subscriber)
         return subscriber
 
-    def create_topic_publisher(self, address):
-        return TopicPublisher(address, self)
+    def create_topic_publisher(self, destination):
+        return TopicPublisher(destination, self)
 
-    def create_topic_subscriber(self, pipeline, address, concurrency, prefetch_count):
-        subscriber = TopicSubscriber(self, pipeline, address, concurrency, prefetch_count)
+    def create_topic_subscriber(self, pipeline, destination, concurrency, prefetch_count):
+        subscriber = TopicSubscriber(self, pipeline, destination, concurrency, prefetch_count)
         self.__subscribers.append(subscriber)
         return subscriber
 
@@ -236,13 +235,13 @@ class Transport(base.Transport):
                 self.open()
                 LOGGER.info('Connection re-established to the broker.')
 
-                for consumer in self.__consumers:
+                for subscriber in self.__subscribers:
                     try:
-                        if consumer.is_started:
-                            consumer.stop()
-                            consumer.start()
+                        if subscriber.is_started:
+                            subscriber.stop()
+                            subscriber.start()
                     except:
-                        LOGGER.critical('Subscribe failed for the address %s.' % consumer.address, exc_info=True)
+                        LOGGER.critical('Subscribe failed for the destination %s.' % subscriber.destination, exc_info=True)
 
             except:
                 count += 1
@@ -250,14 +249,14 @@ class Transport(base.Transport):
 
 
 class QueuePublisher(base.MessagePublisher):
-    def __init__(self, address, transport):
-        self.__address = address
+    def __init__(self, destination, transport):
+        self.__destination = destination
         self.__transport = transport
 
     def publish(self, message):
         for i in range(2):
             try:
-                self.__transport.send_message('', self.__address, message, True, True)
+                self.__transport.send_message('', self.__destination, message, True, True)
                 break
             except Exception as e:
                 if i == 1 or 'NO_ROUTE' not in str(e):
@@ -267,33 +266,33 @@ class QueuePublisher(base.MessagePublisher):
     def __create_queue(self):
         channel = self.__transport.acquire_channel()
         try:
-            channel.queue.declare(self.__address, durable=True)
+            channel.queue.declare(self.__destination, durable=True)
         finally:
             self.__transport.release_channel(channel)
 
 
 class QueuePurger(base.MessagePurger):
-    def __init__(self, address, transport):
-        self.__address = address
+    def __init__(self, destination, transport):
+        self.__destination = destination
         self.__transport = transport
 
     def purge(self):
         channel = self.__transport.create_channel()
 
         try:
-            channel.queue.purge(self.__address)
+            channel.queue.purge(self.__destination)
         finally:
             channel.close()
 
 
 class QueueSubscriber(base.MessageSubscriber):
-    def __init__(self, transport, pipeline, address, concurrency, prefetch_count):
+    def __init__(self, transport, pipeline, destination, concurrency, prefetch_count):
         self.__transport = transport
         self.__pipeline = pipeline
         self.__channels = []
         self.__is_started = False
 
-        self.address = address
+        self.destination = destination
         self.concurrency = concurrency
         self.prefetch_count = prefetch_count
 
@@ -304,9 +303,9 @@ class QueueSubscriber(base.MessageSubscriber):
     def start(self):
         for i in range(self.concurrency):
             channel = self.__transport.create_channel()
-            channel.queue.declare(self.address, durable=True)
+            channel.queue.declare(self.destination, durable=True)
             channel.basic.qos(self.prefetch_count)
-            channel.basic.consume(self.__on_message, self.address)
+            channel.basic.consume(self.__on_message, self.destination)
             self.__channels.append(channel)
 
             thread = Thread(target=self.__start_receiving, args=(channel,))
@@ -332,33 +331,33 @@ class QueueSubscriber(base.MessageSubscriber):
         try:
             transport_message = self.__transport.create_transport_message(message)
 
-            self.__pipeline.execute(IncomingContext(transport_message, self.address))
+            self.__pipeline.execute(IncomingContext(transport_message, self.destination))
 
             message.ack()
         except:
-            LOGGER.exception('RabbitMQ receive operation failed. Address: ' + self.address)
+            LOGGER.exception('RabbitMQ receive operation failed. Destination: ' + self.destination)
 
             message.reject(True)
 
 
 class TopicPublisher(base.MessagePublisher):
-    def __init__(self, address, transport):
-        self.__address = address
+    def __init__(self, destination, transport):
+        self.__destination = destination
         self.__transport = transport
 
     def publish(self, message):
-        self.__transport.send_message(self.__address, '', message, False, True)
+        self.__transport.send_message(self.__destination, '', message, False, True)
 
 
 class TopicSubscriber(base.MessageSubscriber):
-    def __init__(self, transport, pipeline, address, concurrency, prefetch_count):
+    def __init__(self, transport, pipeline, destination, concurrency, prefetch_count):
         self.__transport = transport
         self.__pipeline = pipeline
-        self.__queue = address + ':' + str(uuid.uuid4()).replace('-', '')
+        self.__queue = destination + ':' + str(uuid.uuid4()).replace('-', '')
         self.__channels = []
         self.__is_started = False
 
-        self.address = address
+        self.destination = destination
         self.concurrency = concurrency
         self.prefetch_count = prefetch_count
 
@@ -370,9 +369,9 @@ class TopicSubscriber(base.MessageSubscriber):
     def start(self):
         for i in range(self.concurrency):
             channel = self.__transport.create_channel()
-            channel.exchange.declare(self.address, 'topic', durable=True)
+            channel.exchange.declare(self.destination, 'topic', durable=True)
             channel.queue.declare(self.__queue, auto_delete=True)
-            channel.queue.bind(self.__queue, self.address)
+            channel.queue.bind(self.__queue, self.destination)
             channel.basic.consume(self.__on_message, self.__queue)
             self.__channels.append(channel)
 
@@ -399,11 +398,11 @@ class TopicSubscriber(base.MessageSubscriber):
         try:
             transport_message = self.__transport.create_transport_message(message)
 
-            self.__pipeline.execute(IncomingContext(transport_message, self.address))
+            self.__pipeline.execute(IncomingContext(transport_message, self.destination))
 
             message.ack()
         except:
-            LOGGER.exception('RabbitMQ receive operation failed. Address: ' + self.address)
+            LOGGER.exception('RabbitMQ receive operation failed. Destination: ' + self.destination)
 
             message.reject(True)
 

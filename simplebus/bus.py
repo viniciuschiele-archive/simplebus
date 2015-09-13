@@ -75,18 +75,18 @@ class SimpleBus(object):
             raise SimpleBusError('Message \'%s\' already has a handler.' % str(message_cls))
         self.__handlers[message_cls] = f
 
-    def command(self, name=None, address=None, error_queue=None, expires=None, concurrency=None,
+    def command(self, name=None, destination=None, error_queue=None, expires=None, concurrency=None,
                 prefetch_count=None, compressor=None, serializer=None, purge=None, endpoint=None):
         def decorator(cls):
-            setup_message_class(cls, name, 0, address, error_queue, expires, concurrency, prefetch_count,
+            setup_message_class(cls, name, 0, destination, error_queue, expires, concurrency, prefetch_count,
                                 compressor, serializer, purge, endpoint)
             return cls
         return decorator
 
-    def event(self, name=None, address=None, error_queue=None, expires=None, concurrency=None,
+    def event(self, name=None, destination=None, error_queue=None, expires=None, concurrency=None,
               prefetch_count=None, compressor=None, serializer=None, endpoint=None):
         def decorator(cls):
-            setup_message_class(cls, name, 1, address, error_queue, expires, concurrency, prefetch_count,
+            setup_message_class(cls, name, 1, destination, error_queue, expires, concurrency, prefetch_count,
                                 compressor, serializer, False, endpoint)
             return cls
         return decorator
@@ -110,7 +110,7 @@ class SimpleBus(object):
 
         options = self.messages.add(message_cls)
 
-        address = options.get('address')
+        destination = options.get('destination')
         concurrency = options.get('concurrency')
         prefetch_count = options.get('prefetch_count')
         purge = options.get('purge')
@@ -122,10 +122,10 @@ class SimpleBus(object):
 
         if is_command(message_cls):
             if purge:
-                purger = transport.create_queue_purger(address)
-            subscriber = transport.create_queue_subscriber(self.incoming_pipeline, address, concurrency, prefetch_count)
+                purger = transport.create_queue_purger(destination)
+            subscriber = transport.create_queue_subscriber(self.incoming_pipeline, destination, concurrency, prefetch_count)
         else:
-            subscriber = transport.create_topic_subscriber(self.incoming_pipeline, address, concurrency, prefetch_count)
+            subscriber = transport.create_topic_subscriber(self.incoming_pipeline, destination, concurrency, prefetch_count)
 
         if purger:
             purger.purge()

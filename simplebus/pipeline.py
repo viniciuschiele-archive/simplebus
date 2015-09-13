@@ -87,9 +87,9 @@ class PipelineContext(object):
 
 
 class IncomingContext(PipelineContext):
-    def __init__(self, transport_message, address):
+    def __init__(self, transport_message, destination):
         self.transport_message = transport_message
-        self.address = address
+        self.destination = destination
         self.content_type = transport_message.content_type
         self.content_encoding = transport_message.content_encoding
         self.body = transport_message.body

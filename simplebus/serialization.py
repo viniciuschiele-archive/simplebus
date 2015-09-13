@@ -63,16 +63,16 @@ class DeserializeMessageStep(PipelineStep):
                 return message_cls
             raise SerializationError('Not found a message class for the type \'%s\'.' % context.type)
         else:
-            address = context.options.get('address')
+            destination = context.options.get('destination')
 
-            messages_cls = self.__messages.get_by_address(address)
+            messages_cls = self.__messages.get_by_destination(destination)
             if len(messages_cls) == 1:
                 return messages_cls[0]
 
             if not messages_cls:
-                raise SerializationError('Not found a message class for the address \'%s\'.' % address)
+                raise SerializationError('Not found a message class for the destination \'%s\'.' % destination)
             else:
-                raise SerializationError('Multiple message classes for the address \'%s\'.' % address)
+                raise SerializationError('Multiple message classes for the destination \'%s\'.' % destination)
 
 
 class SerializeMessageStep(PipelineStep):

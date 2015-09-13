@@ -41,7 +41,7 @@ def is_event(message_cls):
     return message_cls.__message_type__ != 0
 
 
-def setup_message_class(message_cls, name, type, address, error_queue, expires, concurrency, prefetch_count,
+def setup_message_class(message_cls, name, type, destination, error_queue, expires, concurrency, prefetch_count,
                         compressor, serializer, purge, endpoint):
     message_cls.__message_name__ = name or message_cls.__name__
     message_cls.__message_type__ = type
@@ -49,8 +49,8 @@ def setup_message_class(message_cls, name, type, address, error_queue, expires, 
     message_cls.__dict_to_message__ = _generate_dict_to_message(message_cls)
     message_cls.__message_to_dict__ = _generate_message_to_dict(message_cls)
 
-    if address:
-        message_cls.__message_options__['address'] = address
+    if destination:
+        message_cls.__message_options__['destination'] = destination
 
     if error_queue:
         message_cls.__message_options__['error_queue'] = error_queue
@@ -104,7 +104,7 @@ def _generate_message_to_dict(message_cls):
 class MessageRegistry(object):
     def __init__(self, config):
         self.__config = config
-        self.__messages_by_address = {}
+        self.__messages_by_destination = {}
         self.__messages_by_name = {}
         self.__message_options = {}
 
@@ -115,15 +115,15 @@ class MessageRegistry(object):
         self.__messages_by_name[type] = message_cls
 
         options = self.get_options(message_cls)
-        address = options['address']
-        messages = self.__messages_by_address.get(address)
+        destination = options['destination']
+        messages = self.__messages_by_destination.get(destination)
         if messages is None:
-            messages = self.__messages_by_address[address] = []
+            messages = self.__messages_by_destination[destination] = []
         messages.append(message_cls)
         return options
 
-    def get_by_address(self, address):
-        return self.__messages_by_address.get(address)
+    def get_by_destination(self, destination):
+        return self.__messages_by_destination.get(destination)
 
     def get_by_name(self, name):
         return self.__messages_by_name.get(name)
@@ -152,9 +152,9 @@ class MessageRegistry(object):
             options.update(options2)
 
         if is_command(message_cls):
-            options['address'] = self.__config.SIMPLEBUS_COMMAND_ADDRESS
+            options['destination'] = self.__config.SIMPLEBUS_COMMAND_DESTINATION
         else:
-            options['address'] = self.__config.SIMPLEBUS_EVENT_ADDRESS
+            options['destination'] = self.__config.SIMPLEBUS_EVENT_DESTINATION
 
         options.update(get_message_options(message_cls))
 

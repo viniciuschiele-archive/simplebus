@@ -35,7 +35,7 @@ class MoveFaultsToDeadLetterStep(PipelineStep):
 
             transport_message = context.transport_message
             transport_message.headers['x-death-reason'] = str(e)
-            transport_message.headers['x-failed-address'] = context.options.get('address')
+            transport_message.headers['x-failed-destination'] = context.options.get('destination')
             transport_message.expiration = None
 
             transport = get_transport(self.__transports, context.options.get('endpoint'))

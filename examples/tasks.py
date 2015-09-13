@@ -3,13 +3,13 @@ from simplebus import SimpleBus
 bus = SimpleBus(app_id='tasks')
 
 
-@bus.command(address='tasks', concurrency=4, error_queue='tasks.error')
+@bus.command(destination='tasks', concurrency=4, error_queue='tasks.error')
 class ConvertAudioCommand(object):
     def __init__(self, audio_id):
         self.audio_id = audio_id
 
 
-@bus.event(address='tasks.converted', concurrency=4, error_queue='tasks.converted.error')
+@bus.event(destination='tasks.converted', concurrency=4, error_queue='tasks.converted.error')
 class AudioConvertedEvent(object):
     def __init__(self, audio_id):
         self.audio_id = audio_id
