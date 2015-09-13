@@ -281,7 +281,7 @@ class QueuePurger(base.MessagePurger):
         channel = self.__transport.create_channel()
 
         try:
-            Queue(channel).purge(self.__address)
+            channel.queue.purge(self.__address)
         finally:
             channel.close()
 
