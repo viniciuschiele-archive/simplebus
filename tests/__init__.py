@@ -12,22 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from simplebus import Bus
+from simplebus import SimpleBus
 
 
-def create_bus():
-    bus = Bus('unittests')
-    bus.config.from_object(BusConfig())
+def create_simplebus():
+    bus = SimpleBus('unittests')
+    bus.config.from_object(SimpleBusConfig())
     return bus
 
 
-class BusConfig(object):
-    SIMPLEBUS_ENDPOINTS = {
-        'default': 'amqp://guest:guest@127.0.0.1?min_channels=1&max_channels=10'
-    }
-
-    SIMPLEBUS_QUEUES = {
-        '*': {
-            'dead_letter': False
-        }
-    }
+class SimpleBusConfig(object):
+    pass

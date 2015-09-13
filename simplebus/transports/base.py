@@ -132,4 +132,3 @@ class ReceiveFromTransportStep(PipelineStep):
                 raise SimpleBusError('Not found a message class for the address \'%s\'.' % address)
             else:
                 raise SimpleBusError('Multiple message classes for the address \'%s\'.' % address)
-

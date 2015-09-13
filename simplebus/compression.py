@@ -79,4 +79,3 @@ class CompressorRegistry(object):
 
     def remove(self, name):
         self.__compressors.pop(name)
-
