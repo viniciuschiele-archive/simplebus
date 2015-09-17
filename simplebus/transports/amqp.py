@@ -361,7 +361,6 @@ class TopicSubscriber(base.MessageSubscriber):
         self.concurrency = concurrency
         self.prefetch_count = prefetch_count
 
-
     @property
     def is_started(self):
         return self.__is_started

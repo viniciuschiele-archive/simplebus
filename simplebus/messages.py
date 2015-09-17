@@ -14,150 +14,104 @@
 
 import inspect
 
-from .errors import SimpleBusError
+
+COMMAND_MESSAGE_TYPE = 0
+EVENT_MESSAGE_TYPE = 1
 
 
-def dict_to_message(message_cls, data):
-    return message_cls.__dict_to_message__(data)
+class MessageDefinition(object):
+    def __init__(self, message_name, message_type, message_cls):
+        self.message_name = message_name
+        self.message_type = message_type
+        self.message_cls = message_cls
 
+        self.endpoint = None
+        self.error_queue = None
+        self.expires = None
+        self.concurrency = None
+        self.prefetch_count = None
+        self.compressor = None
+        self.serializer = None
+        self.purge_on_subscribe = None
+        self.destination = None
 
-def message_to_dict(message):
-    return type(message).__message_to_dict__(message)
+        self.dict_to_message = self.__generate_dict_to_message()
+        self.message_to_dict = self.__generate_message_to_dict()
 
+    def is_command(self):
+        return self.message_type == COMMAND_MESSAGE_TYPE
 
-def get_message_name(message_cls):
-    return message_cls.__message_name__
+    def is_event(self):
+        return self.message_type == EVENT_MESSAGE_TYPE
 
+    def update(self, options):
+        self.__dict__.update(options)
 
-def get_message_options(message_cls):
-    return message_cls.__message_options__
+    def __generate_dict_to_message(self):
+        def set_dict(data):
+            message = self.message_cls()
+            message.__dict__.update(data)
 
+        args = inspect.getargspec(self.message_cls.__init__)[0]
+        if len(args) > 1:
+            return lambda data: self.message_cls(**data)
+        elif hasattr(self.message_cls, '__dict__'):
+            return set_dict
 
-def is_command(message_cls):
-    return message_cls.__message_type__ == 0
+        raise TypeError('Message \'%s\' has no __init__ to be instantiated.' % str(self.message_cls))
 
-
-def is_event(message_cls):
-    return message_cls.__message_type__ != 0
-
-
-def setup_message_class(message_cls, name, type, destination, error_queue, expires, concurrency, prefetch_count,
-                        compressor, serializer, purge, endpoint):
-    message_cls.__message_name__ = name or message_cls.__name__
-    message_cls.__message_type__ = type
-    message_cls.__message_options__ = {}
-    message_cls.__dict_to_message__ = _generate_dict_to_message(message_cls)
-    message_cls.__message_to_dict__ = _generate_message_to_dict(message_cls)
-
-    if destination:
-        message_cls.__message_options__['destination'] = destination
-
-    if error_queue:
-        message_cls.__message_options__['error_queue'] = error_queue
-
-    if expires:
-        message_cls.__message_options__['expires'] = expires
-
-    if concurrency:
-        message_cls.__message_options__['concurrency'] = concurrency
-
-    if prefetch_count:
-        message_cls.__message_options__['prefetch_count'] = prefetch_count
-
-    if compressor:
-        message_cls.__message_options__['compressor'] = compressor
-
-    if serializer:
-        message_cls.__message_options__['serializer'] = serializer
-
-    if purge:
-        message_cls.__message_options__['purge'] = purge
-
-    if endpoint:
-        message_cls.__message_options__['endpoint'] = endpoint
-
-
-def _generate_dict_to_message(message_cls):
-    def set_dict(data):
-        message = message_cls()
-        message.__dict__.update(data)
-
-    args = inspect.getargspec(message_cls.__init__)[0]
-    if len(args) > 1:
-        return lambda data: message_cls(**data)
-    elif hasattr(message_cls, '__dict__'):
-        return set_dict
-
-    raise TypeError('Message \'%s\' has no __init__ to be instantiated.' % str(message_cls))
-
-
-def _generate_message_to_dict(message_cls):
-    if hasattr(message_cls, 'as_dict'):
-        return lambda message: message.as_dict()
-    if isinstance(message_cls, dict):
-        return lambda message: message
-    if hasattr(message_cls, '__dict__'):
-        return lambda message: message.__dict__
-    raise TypeError('Message \'%s\' cannot be converted to dict' % str(message_cls))
+    def __generate_message_to_dict(self):
+        if hasattr(self.message_cls, 'as_dict'):
+            return lambda message: message.as_dict()
+        if isinstance(self.message_cls, dict):
+            return lambda message: message
+        if hasattr(self.message_cls, '__dict__'):
+            return lambda message: message.__dict__
+        raise TypeError('Message \'%s\' cannot be converted to dict' % str(self.message_cls))
 
 
 class MessageRegistry(object):
     def __init__(self, config):
         self.__config = config
+        self.__messages_by_cls = {}
         self.__messages_by_destination = {}
         self.__messages_by_name = {}
-        self.__message_options = {}
 
-    def add(self, message_cls):
-        name = get_message_name(message_cls)
-        if self.__messages_by_name.get(name) is not None:
-            raise SimpleBusError('Message \'%s\' already subscribed.' % str(message_cls))
-        self.__messages_by_name[type] = message_cls
+    def add(self, message_cls, message_type, message_name=None, **options):
+        if not message_name:
+            message_name = message_cls.__name__
 
-        options = self.get_options(message_cls)
-        destination = options['destination']
-        messages = self.__messages_by_destination.get(destination)
+        message_def = MessageDefinition(message_name, message_type, message_cls)
+        message_def.endpoint = self.__config.SIMPLEBUS_MESSAGE_ENDPOINT
+        message_def.error_queue = self.__config.SIMPLEBUS_MESSAGE_ERROR_QUEUE
+        message_def.expires = self.__config.SIMPLEBUS_MESSAGE_EXPIRES
+        message_def.concurrency = self.__config.SIMPLEBUS_MESSAGE_CONCURRENCY
+        message_def.prefetch_count = self.__config.SIMPLEBUS_MESSAGE_PREFETCH_COUNT
+        message_def.compressor = self.__config.SIMPLEBUS_MESSAGE_COMPRESSOR
+        message_def.serializer = self.__config.SIMPLEBUS_MESSAGE_SERIALIZER
+        message_def.purge_on_subscribe = self.__config.SIMPLEBUS_PURGE_ON_SUBSCRIBE
+
+        if message_def.is_command():
+            message_def.destination = self.__config.SIMPLEBUS_COMMAND_DESTINATION
+        else:
+            message_def.destination = self.__config.SIMPLEBUS_EVENT_DESTINATION
+
+        message_def.update(self.__config.SIMPLEBUS_MESSAGES.get(message_name, {}))
+        message_def.update(options)
+
+        self.__messages_by_cls[message_cls] = message_def
+        self.__messages_by_name[message_name] = message_def
+
+        messages = self.__messages_by_destination.get(message_def.destination)
         if messages is None:
-            messages = self.__messages_by_destination[destination] = []
-        messages.append(message_cls)
-        return options
+            messages = self.__messages_by_destination[message_def.destination] = []
+        messages.append(message_def)
 
-    def get_by_destination(self, destination):
-        return self.__messages_by_destination.get(destination)
+    def get_by_cls(self, c):
+        return self.__messages_by_cls.get(c)
 
     def get_by_name(self, name):
         return self.__messages_by_name.get(name)
 
-    def get_options(self, message_cls):
-        """Gets the options for the specified message class."""
-
-        options = self.__message_options.get(message_cls)
-        if options:
-            return options
-
-        options = {
-            'endpoint': self.__config.SIMPLEBUS_MESSAGE_ENDPOINT,
-            'error_queue': self.__config.SIMPLEBUS_MESSAGE_ERROR_QUEUE,
-            'expires': self.__config.SIMPLEBUS_MESSAGE_EXPIRES,
-            'concurrency': self.__config.SIMPLEBUS_MESSAGE_CONCURRENCY,
-            'prefetch_count': self.__config.SIMPLEBUS_MESSAGE_PREFETCH_COUNT,
-            'compressor': self.__config.SIMPLEBUS_MESSAGE_COMPRESSOR,
-            'serializer': self.__config.SIMPLEBUS_MESSAGE_SERIALIZER,
-            'purge': self.__config.SIMPLEBUS_PURGE_ON_STARTUP,
-        }
-
-        options2 = self.__config.SIMPLEBUS_MESSAGES.get(get_message_name(message_cls))
-
-        if options2:
-            options.update(options2)
-
-        if is_command(message_cls):
-            options['destination'] = self.__config.SIMPLEBUS_COMMAND_DESTINATION
-        else:
-            options['destination'] = self.__config.SIMPLEBUS_EVENT_DESTINATION
-
-        options.update(get_message_options(message_cls))
-
-        self.__message_options[message_cls] = options
-
-        return options
+    def get_by_destination(self, destination):
+        return self.__messages_by_destination.get(destination)

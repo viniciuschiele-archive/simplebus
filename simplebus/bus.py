@@ -19,7 +19,7 @@ from .compression import CompressMessageStep, DecompressMessageStep, CompressorR
 from .errors import SimpleBusError
 from .faults import MoveFaultsToDeadLetterStep
 from .handlers import InvokeHandlerStep
-from .messages import is_command, setup_message_class, MessageRegistry
+from .messages import MessageRegistry, COMMAND_MESSAGE_TYPE, EVENT_MESSAGE_TYPE
 from .pipeline import Pipeline, OutgoingContext
 from .serialization import DeserializeMessageStep, SerializeMessageStep, SerializerRegistry
 from .state import set_current_bus
@@ -75,19 +75,15 @@ class SimpleBus(object):
             raise SimpleBusError('Message \'%s\' already has a handler.' % str(message_cls))
         self.__handlers[message_cls] = f
 
-    def command(self, name=None, destination=None, error_queue=None, expires=None, concurrency=None,
-                prefetch_count=None, compressor=None, serializer=None, purge=None, endpoint=None):
+    def command(self, name=None, **options):
         def decorator(cls):
-            setup_message_class(cls, name, 0, destination, error_queue, expires, concurrency, prefetch_count,
-                                compressor, serializer, purge, endpoint)
+            self.messages.add(cls, COMMAND_MESSAGE_TYPE, name, **options)
             return cls
         return decorator
 
-    def event(self, name=None, destination=None, error_queue=None, expires=None, concurrency=None,
-              prefetch_count=None, compressor=None, serializer=None, endpoint=None):
+    def event(self, name=None, **options):
         def decorator(cls):
-            setup_message_class(cls, name, 1, destination, error_queue, expires, concurrency, prefetch_count,
-                                compressor, serializer, False, endpoint)
+            self.messages.add(cls, EVENT_MESSAGE_TYPE, name, **options)
             return cls
         return decorator
 
@@ -100,35 +96,28 @@ class SimpleBus(object):
         """Publishes a message to the specified topic."""
         self.__ensure_started()
 
-        options = self.messages.get_options(type(message))
-        context = OutgoingContext(message, options)
+        message_def = self.messages.get_by_cls(type(message))
+        context = OutgoingContext(message, message_def)
         self.outgoing_pipeline.execute(context)
 
     def subscribe(self, message_cls):
         """Subscribes to receive published messages to the specified topic."""
         self.__ensure_started()
 
-        options = self.messages.add(message_cls)
+        message_def = self.messages.get_by_cls(message_cls)
 
-        destination = options.get('destination')
-        concurrency = options.get('concurrency')
-        prefetch_count = options.get('prefetch_count')
-        purge = options.get('purge')
-        endpoint = options.get('endpoint')
+        transport = get_transport(self.__transports, message_def.endpoint)
 
-        transport = get_transport(self.__transports, endpoint)
-
-        purger = None
-
-        if is_command(message_cls):
-            if purge:
-                purger = transport.create_queue_purger(destination)
-            subscriber = transport.create_queue_subscriber(self.incoming_pipeline, destination, concurrency, prefetch_count)
-        else:
-            subscriber = transport.create_topic_subscriber(self.incoming_pipeline, destination, concurrency, prefetch_count)
-
-        if purger:
+        if message_def.purge_on_subscribe and message_def.is_command():
+            purger = transport.create_queue_purger(message_def.destination)
             purger.purge()
+
+        if message_def.is_command():
+            subscriber = transport.create_queue_subscriber(self.incoming_pipeline, message_def.destination,
+                                                           message_def.concurrency, message_def.prefetch_count)
+        else:
+            subscriber = transport.create_topic_subscriber(self.incoming_pipeline, message_def.destination,
+                                                           message_def.concurrency, message_def.prefetch_count)
 
         subscriber.start()
         return subscriber

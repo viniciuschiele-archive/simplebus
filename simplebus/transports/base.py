@@ -19,7 +19,6 @@ import logging
 
 from abc import ABCMeta, abstractmethod
 from ..errors import SimpleBusError
-from ..messages import is_command, get_message_name
 from ..pipeline import PipelineStep
 from ..state import set_transport_message
 from ..utils import create_random_id, import_string
@@ -157,25 +156,24 @@ class ReceiveFromTransportStep(PipelineStep):
         try:
             set_transport_message(context.transport_message)
 
-            context.message_cls = self.__get_best_message_cls(context.transport_message, context.destination)
-            context.options = self.__messages.get_options(context.message_cls)
+            context.message_def = self.__get_best_message_def(context.transport_message, context.destination)
 
             next_step()
         finally:
             set_transport_message(None)
 
-    def __get_best_message_cls(self, transport_message, destination):
+    def __get_best_message_def(self, transport_message, destination):
         if transport_message.type:
-            message_cls = self.__messages.get_by_type(transport_message.type)
-            if message_cls:
-                return message_cls
+            message_def = self.__messages.get_by_name(transport_message.type)
+            if message_def:
+                return message_def
             raise SimpleBusError('Not found a message class for the type \'%s\'.' % transport_message.type)
         else:
-            messages_cls = self.__messages.get_by_destination(destination)
-            if len(messages_cls) == 1:
-                return messages_cls[0]
+            message_defs = self.__messages.get_by_destination(destination)
+            if len(message_defs) == 1:
+                return message_defs[0]
 
-            if messages_cls:
+            if message_defs:
                 raise SimpleBusError('Multiple message classes for the destination \'%s\'.' % destination)
 
             raise SimpleBusError('Not found a message class for the destination \'%s\'.' % destination)
@@ -189,26 +187,24 @@ class SendToTransportStep(PipelineStep):
         self.__transports = transports
 
     def execute(self, context, next_step):
-        options = context.options
+        message_def = context.message_def
+
         transport_message = TransportMessage()
         transport_message.app_id = self.__app_id
         transport_message.message_id = create_random_id()
-        transport_message.expiration = options.get('expires')
+        transport_message.expiration = message_def.expires
         transport_message.content_type = context.content_type
         transport_message.content_encoding = context.content_encoding
         transport_message.body = context.body
-        transport_message.type = get_message_name(context.message_cls)
+        transport_message.type = message_def.message_name
 
-        destination = options.get('destination')
+        transport = get_transport(self.__transports, message_def.endpoint)
 
-        transport = get_transport(self.__transports, options.get('endpoint'))
-
-        if is_command(context.message_cls):
-            publisher = transport.create_queue_publisher(destination)
+        if message_def.is_command():
+            publisher = transport.create_queue_publisher(message_def.destination)
         else:
-            publisher = transport.create_topic_publisher(destination)
+            publisher = transport.create_topic_publisher(message_def.destination)
 
         publisher.publish(transport_message)
 
         next_step()
-

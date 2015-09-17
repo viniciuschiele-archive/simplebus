@@ -28,16 +28,16 @@ class MoveFaultsToDeadLetterStep(PipelineStep):
         except AssertionError:
             raise
         except Exception as e:
-            error_queue = context.options.get('error_queue')
+            error_queue = context.message_def.error_queue
 
             if not error_queue:
                 raise
 
             transport_message = context.transport_message
             transport_message.headers['x-death-reason'] = str(e)
-            transport_message.headers['x-failed-destination'] = context.options.get('destination')
+            transport_message.headers['x-failed-destination'] = context.message_def.destination
             transport_message.expiration = None
 
-            transport = get_transport(self.__transports, context.options.get('endpoint'))
+            transport = get_transport(self.__transports, context.message_def.endpoint)
             sender = transport.create_sender(error_queue)
             sender.dispatch(transport_message)

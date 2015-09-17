@@ -27,10 +27,11 @@ class InvokeHandlerStep(PipelineStep):
         self.__handlers = handlers
 
     def execute(self, context, next_step):
-        handler = self.__handlers.get(type(context.body))
+        handler = self.__handlers.get(context.message_def.message_cls)
 
         if not handler:
-            raise SimpleBusError('No handler found to the message \'%s\'.' % str(type(context.body)))
+            raise SimpleBusError('No handler found to the message \'%s\'.' %
+                                 str(type(context.message_def.message_cls)))
 
         handler(context.body)
         next_step()

@@ -27,7 +27,7 @@ class CompressMessageStep(PipelineStep):
         self.__compressors = compressors
 
     def execute(self, context, next_step):
-        name = context.options.get('compressor')
+        name = context.message_def.compressor
         if name:
             try:
                 compressor = self.__compressors.get(name)
@@ -46,8 +46,8 @@ class DecompressMessageStep(PipelineStep):
         self.__compressors = compressors
 
     def execute(self, context, next_step):
-        if context.content_encoding:
-            compressor = self.__compressors.get(context.content_encoding)
+        if context.transport_message.content_encoding:
+            compressor = self.__compressors.get(context.transport_message.content_encoding)
 
             try:
                 context.body = compressor.decompress(context.body)

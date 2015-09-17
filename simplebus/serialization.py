@@ -17,7 +17,6 @@
 import pickle
 
 from .errors import SerializationError
-from .messages import dict_to_message, message_to_dict
 from .pipeline import PipelineStep
 
 try:
@@ -40,39 +39,20 @@ class DeserializeMessageStep(PipelineStep):
 
     def execute(self, context, next_step):
         serializer = self.__get_best_serializer(context)
-        message_cls = self.__get_best_message_cls(context)
 
         try:
             context.body = serializer.deserialize(context.body)
-            context.body = dict_to_message(message_cls, context.body)
+            context.body = context.message_def.dict_to_message(context.body)
         except Exception as e:
             raise SerializationError(e)
 
         next_step()
 
     def __get_best_serializer(self, context):
-        if context.content_type:
-            return self.__serializers.find(context.content_type)
+        if context.transport_message.content_type:
+            return self.__serializers.find(context.transport_message.content_type)
 
-        return self.__serializers.get(context.options.get('serializer'))
-
-    def __get_best_message_cls(self, context):
-        if context.type:
-            message_cls = self.__messages.get_by_type(context.type)
-            if message_cls:
-                return message_cls
-            raise SerializationError('Not found a message class for the type \'%s\'.' % context.type)
-        else:
-            destination = context.options.get('destination')
-
-            messages_cls = self.__messages.get_by_destination(destination)
-            if len(messages_cls) == 1:
-                return messages_cls[0]
-
-            if not messages_cls:
-                raise SerializationError('Not found a message class for the destination \'%s\'.' % destination)
-            else:
-                raise SerializationError('Multiple message classes for the destination \'%s\'.' % destination)
+        return self.__serializers.get(context.message_def.serializer)
 
 
 class SerializeMessageStep(PipelineStep):
@@ -82,10 +62,11 @@ class SerializeMessageStep(PipelineStep):
         self.__serializers = serializers
 
     def execute(self, context, next_step):
-        serializer = self.__serializers.get(context.options.get('serializer'))
+        serializer = self.__serializers.get(context.message_def.serializer)
 
         try:
-            context.body = serializer.serialize(message_to_dict(context.body))
+            data = context.message_def.message_to_dict(context.body)
+            context.body = serializer.serialize(data)
             context.content_type = serializer.mimetype
         except Exception as e:
             raise SerializationError(e)

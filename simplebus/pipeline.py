@@ -90,16 +90,11 @@ class IncomingContext(PipelineContext):
     def __init__(self, transport_message, destination):
         self.transport_message = transport_message
         self.destination = destination
-        self.content_type = transport_message.content_type
-        self.content_encoding = transport_message.content_encoding
         self.body = transport_message.body
-        self.type = transport_message.type
-        self.headers = transport_message.headers
 
 
 class OutgoingContext(PipelineContext):
-    def __init__(self, message, options):
+    def __init__(self, message, message_def):
         self.message = message
-        self.message_cls = type(message)
+        self.message_def = message_def
         self.body = message
-        self.options = options

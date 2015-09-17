@@ -28,7 +28,7 @@ class TestSimpleBus(TestCase):
         self.bus.stop()
 
     def test_publish_subscribe(self):
-        @self.bus.command(purge=True)
+        @self.bus.command(purge_on_subscribe=True)
         class Message(object):
             def __init__(self, text):
                 self.text = text
@@ -43,7 +43,7 @@ class TestSimpleBus(TestCase):
         self.bus.loop.start()
 
     def test_compression(self):
-        @self.bus.command(compressor='gzip', purge=True)
+        @self.bus.command(compressor='gzip', purge_on_subscribe=True)
         class Message(object):
             def __init__(self, text):
                 self.text = text
@@ -59,7 +59,7 @@ class TestSimpleBus(TestCase):
         self.bus.loop.start()
 
     def test_serializer(self):
-        @self.bus.command(serializer='json', purge=True)
+        @self.bus.command(serializer='json', purge_on_subscribe=True)
         class Message(object):
             def __init__(self, text):
                 self.text = text
@@ -79,7 +79,7 @@ class TestSimpleBus(TestCase):
 
         self.thread_ids = []
 
-        @self.bus.command(concurrency=2, prefetch_count=1, purge=True)
+        @self.bus.command(concurrency=2, prefetch_count=1, purge_on_subscribe=True)
         class Message(object):
             def __init__(self, text):
                 self.text = text
