@@ -1,15 +1,9 @@
 # Changelog
 
 ### Version 2.0.0 (next)
- - Added incoming and outgoing messaging pipeline.
- - Removed MessageDispatcher and DefaultDispatcher classes.
- - retry attribute has been removed.
- - max_retries set to 0 by default.
- - retry_delay set to 0 by default.
- - Compression classes has been refactored, breaking compatibility.
-   - Added the method add_compressor in the Bus class to add a compression algorithm.
- - Attribute compression has been renamed to compressor
- - Added new attribute called decompressor
+ - SimpleBus has been refactored breaking compatibility with old versions.
+ - Support to incoming and outgoing messaging pipeline, these pipelines can be customized.
+ - Message published or subscribed is no longer a dict, from now any message must be a class, there are two kind of messages, command and event.
 
 ### Version 1.0.1
  - Fixed bug in retry logic.
