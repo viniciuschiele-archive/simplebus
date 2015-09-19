@@ -59,14 +59,14 @@ class TestSimpleBus(TestCase):
         self.bus.loop.start()
 
     def test_serializer(self):
-        @self.bus.command(serializer='json', purge_on_subscribe=True)
+        @self.bus.command(serializer='pickle', purge_on_subscribe=True)
         class Message(object):
             def __init__(self, text):
                 self.text = text
 
         @self.bus.handle(Message)
         def handle(message):
-            self.assertEqual('application/json', transport_message.content_type)
+            self.assertEqual('application/x-pickle', transport_message.content_type)
             self.assertEqual('hello', message.text)
             self.bus.loop.stop()
 

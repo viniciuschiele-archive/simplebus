@@ -9,7 +9,7 @@ class ConvertAudioCommand(object):
         self.audio_id = audio_id
 
 
-@bus.event(destination='tasks.converted', concurrency=4, error_queue='tasks.converted.error')
+@bus.event(destination='tasks.converted', concurrency=4)
 class AudioConvertedEvent(object):
     def __init__(self, audio_id):
         self.audio_id = audio_id
