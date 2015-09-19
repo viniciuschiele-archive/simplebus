@@ -42,7 +42,7 @@ class SimpleBus(object):
 
         self.compressors = CompressorRegistry()
         self.serializers = SerializerRegistry()
-        self.messages = MessageRegistry(self.config)
+        self.messages = MessageRegistry(self)
 
         self.incoming_pipeline = Pipeline()
         self.incoming_pipeline.add_step(ReceiveFromTransportStep(self.messages))

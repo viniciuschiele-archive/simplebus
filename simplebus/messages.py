@@ -14,6 +14,7 @@
 
 import inspect
 
+from .errors import SimpleBusError
 
 COMMAND_MESSAGE_TYPE = 0
 EVENT_MESSAGE_TYPE = 1
@@ -71,13 +72,16 @@ class MessageDefinition(object):
 
 
 class MessageRegistry(object):
-    def __init__(self, config):
-        self.__config = config
+    def __init__(self, bus):
+        self.__config = bus.config
         self.__messages_by_cls = {}
         self.__messages_by_destination = {}
         self.__messages_by_name = {}
 
     def add(self, message_cls, message_type, message_name=None, **options):
+        if self.__messages_by_cls.get(message_cls):
+            raise SimpleBusError('Message already registered.')
+
         if not message_name:
             message_name = message_cls.__name__
 
@@ -107,8 +111,8 @@ class MessageRegistry(object):
             messages = self.__messages_by_destination[message_def.destination] = []
         messages.append(message_def)
 
-    def get_by_cls(self, c):
-        return self.__messages_by_cls.get(c)
+    def get_by_cls(self, cls):
+        return self.__messages_by_cls.get(cls)
 
     def get_by_name(self, name):
         return self.__messages_by_name.get(name)
