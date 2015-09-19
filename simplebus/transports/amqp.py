@@ -337,7 +337,7 @@ class QueueSubscriber(base.MessageSubscriber):
         except:
             LOGGER.exception('RabbitMQ receive operation failed. Destination: ' + self.destination)
 
-            message.reject(True)
+            message.reject(requeue=False)
 
 
 class TopicPublisher(base.MessagePublisher):
@@ -403,7 +403,7 @@ class TopicSubscriber(base.MessageSubscriber):
         except:
             LOGGER.exception('RabbitMQ receive operation failed. Destination: ' + self.destination)
 
-            message.reject(True)
+            message.reject(requeue=False)
 
 
 class ChannelPool(ResourcePool):
